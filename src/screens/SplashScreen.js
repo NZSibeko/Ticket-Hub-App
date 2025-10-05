@@ -50,12 +50,12 @@ const SplashScreen = ({ navigation }) => {
         <View style={styles.logoCircle}>
           <Text style={styles.logoText}>LOGO</Text>
         </View>
-        <Text style={styles.appName}>Event Ticketing</Text>
+        <Text style={styles.appName}>Ticket-hub</Text>
         <Text style={styles.appTagline}>Your Gateway to Amazing Events</Text>
       </Animated.View>
 
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6200ee" />
+        <ActivityIndicator size="large" color="#000000" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
 
@@ -67,7 +67,7 @@ const SplashScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#6200ee',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 42,
     fontWeight: 'bold',
-    color: '#6200ee',
+    color: '#000000',
   },
   appName: {
     fontSize: 32,

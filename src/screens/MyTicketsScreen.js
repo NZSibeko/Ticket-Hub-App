@@ -1,54 +1,143 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import ODataService from '../services/ODataService';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  Image,
+  RefreshControl
+} from 'react-native';
+import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+import QRCode from 'react-native-qrcode-svg';
+
+const API_URL = 'http://localhost:3000';
 
 const MyTicketsScreen = () => {
-  const { user } = useAuth();
+  const { user, getAuthHeader } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedTab, setSelectedTab] = useState('current'); // 'current' or 'previous'
   const [error, setError] = useState(null);
-  const navigation = useNavigation();
 
   useEffect(() => {
     if (!user) return;
-
-    const fetchTickets = async () => {
-      try {
-        const data = await ODataService.get('zi_tickets', {
-          $filter: `customer_id eq '${user.customer_id}'`,
-          $expand: '_event'
-        });
-        setTickets(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTickets();
   }, [user]);
 
-  const renderTicketItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.ticketCard}
-      onPress={() => navigation.navigate('EventDetail', { eventId: item.event_id })}
-    >
-      <Text style={styles.eventName}>{item._event?.event_name || 'Event'}</Text>
-      <Text style={styles.ticketCode}>Ticket: {item.ticket_code}</Text>
-      <Text style={styles.ticketStatus}>Status: {item.ticket_status}</Text>
-      <Text style={styles.purchaseDate}>
-        Purchased: {new Date(item.purchase_date).toLocaleDateString()}
-      </Text>
-      {item.validation_date && (
-        <Text style={styles.validationDate}>
-          Validated: {new Date(item.validation_date).toLocaleDateString()}
-        </Text>
-      )}
-    </TouchableOpacity>
-  );
+  const fetchTickets = async () => {
+    try {
+      const headers = getAuthHeader();
+      const response = await axios.get(
+        `${API_URL}/api/tickets/customer/${user.customer_id}`,
+        { headers }
+      );
+      setTickets(response.data.tickets || []);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching tickets:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTickets();
+  };
+
+  const filterTickets = () => {
+    const now = new Date();
+    return tickets.filter(ticket => {
+      const eventDate = new Date(ticket.event_date);
+      if (selectedTab === 'current') {
+        return eventDate >= now && ticket.ticket_status !== 'CANCELLED';
+      } else {
+        return eventDate < now || ticket.ticket_status === 'CANCELLED';
+      }
+    });
+  };
+
+  const renderTicketItem = ({ item }) => {
+    const isPast = new Date(item.event_date) < new Date() || item.ticket_status === 'CANCELLED';
+    
+    return (
+      <View style={[styles.ticketCard, isPast && styles.ticketCardPast]}>
+        <View style={styles.ticketHeader}>
+          <Image
+            source={{ uri: item.event_image || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=400' }}
+            style={styles.ticketImage}
+            resizeMode="cover"
+          />
+          {item.ticket_status === 'VALIDATED' && (
+            <View style={styles.validatedBadge}>
+              <Text style={styles.validatedText}>✓ USED</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.ticketBody}>
+          <Text style={styles.eventName}>{item.event_name}</Text>
+          
+          <View style={styles.ticketDetails}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailIcon}>📅</Text>
+              <Text style={styles.detailText}>
+                {new Date(item.event_date).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailIcon}>🕐</Text>
+              <Text style={styles.detailText}>
+                {new Date(item.event_date).toLocaleTimeString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+            </View>
+            
+            <View style={styles.detailRow}>
+              <Text style={styles.detailIcon}>📍</Text>
+              <Text style={styles.detailText}>{item.location}</Text>
+            </View>
+          </View>
+
+          {!isPast && (
+            <View style={styles.qrContainer}>
+              <QRCode
+                value={item.ticket_code}
+                size={120}
+                backgroundColor="white"
+              />
+              <Text style={styles.ticketCode}>{item.ticket_code}</Text>
+            </View>
+          )}
+
+          <View style={[
+            styles.statusBadge,
+            item.ticket_status === 'VALIDATED' ? styles.statusValidated :
+            item.ticket_status === 'CANCELLED' ? styles.statusCancelled :
+            styles.statusActive
+          ]}>
+            <Text style={styles.statusText}>
+              {item.ticket_status}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   if (!user) {
     return (
@@ -61,31 +150,56 @@ const MyTicketsScreen = () => {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#000" />
       </View>
     );
   }
 
-  if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>Error: {error}</Text>
-      </View>
-    );
-  }
+  const filteredTickets = filterTickets();
 
   return (
     <View style={styles.container}>
-      {tickets.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.noTickets}>You don't have any tickets yet</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>My Tickets</Text>
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, selectedTab === 'current' && styles.tabActive]}
+          onPress={() => setSelectedTab('current')}
+        >
+          <Text style={[styles.tabText, selectedTab === 'current' && styles.tabTextActive]}>
+            Current
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, selectedTab === 'previous' && styles.tabActive]}
+          onPress={() => setSelectedTab('previous')}
+        >
+          <Text style={[styles.tabText, selectedTab === 'previous' && styles.tabTextActive]}>
+            Previous
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {filteredTickets.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🎫</Text>
+          <Text style={styles.emptyText}>
+            {selectedTab === 'current' ? 'No upcoming tickets' : 'No past tickets'}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={tickets}
+          data={filteredTickets}
           renderItem={renderTicketItem}
           keyExtractor={item => item.ticket_id}
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         />
       )}
     </View>
@@ -95,7 +209,42 @@ const MyTicketsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 10,
+    backgroundColor: '#f8f9fa',
+  },
+  header: {
+    backgroundColor: '#000',
+    paddingTop: 50,
+    paddingBottom: 20,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: '#000',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#999',
+  },
+  tabTextActive: {
+    color: '#000',
   },
   center: {
     flex: 1,
@@ -106,47 +255,120 @@ const styles = StyleSheet.create({
     color: 'red',
     fontSize: 16,
   },
-  noTickets: {
-    fontSize: 18,
-    color: '#888',
-  },
   listContent: {
-    paddingBottom: 20,
+    padding: 16,
   },
   ticketCard: {
-    backgroundColor: 'white',
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  ticketCardPast: {
+    opacity: 0.7,
+  },
+  ticketHeader: {
+    position: 'relative',
+    height: 160,
+    backgroundColor: '#e0e0e0',
+  },
+  ticketImage: {
+    width: '100%',
+    height: '100%',
+  },
+  validatedBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(76, 175, 80, 0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  validatedText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  ticketBody: {
+    padding: 20,
   },
   eventName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 5,
+    color: '#000',
+    marginBottom: 16,
+  },
+  ticketDetails: {
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  detailIcon: {
+    fontSize: 16,
+    marginRight: 12,
+    width: 24,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  qrContainer: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    marginBottom: 16,
   },
   ticketCode: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 5,
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    letterSpacing: 2,
   },
-  ticketStatus: {
-    fontSize: 14,
-    color: '#444',
-    marginBottom: 5,
+  statusBadge: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
   },
-  purchaseDate: {
+  statusActive: {
+    backgroundColor: '#E3F2FD',
+  },
+  statusValidated: {
+    backgroundColor: '#E8F5E9',
+  },
+  statusCancelled: {
+    backgroundColor: '#FFEBEE',
+  },
+  statusText: {
     fontSize: 12,
-    color: '#777',
-    marginBottom: 3,
+    fontWeight: 'bold',
+    color: '#666',
   },
-  validationDate: {
-    fontSize: 12,
-    color: '#777',
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#999',
   },
 });
 

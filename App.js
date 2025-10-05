@@ -34,10 +34,10 @@ function MainTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'HomeTab') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'EventsTab') {
+          if (route.name === 'DiscoverTab') {
             iconName = focused ? 'calendar' : 'calendar-outline';
+          } else if (route.name === 'HomeTab') {
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'TicketsTab') {
             iconName = focused ? 'ticket' : 'ticket-outline';
           } else if (route.name === 'ProfileTab') {
@@ -46,25 +46,25 @@ function MainTabs() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#6200ee',
+        tabBarActiveTintColor: '#000000',
         tabBarInactiveTintColor: 'gray',
         headerShown: false,
       })}
     >
       <Tab.Screen 
         name="HomeTab" 
-        component={HomeScreen}
-        options={{ title: 'Home' }}
-      />
-      <Tab.Screen 
-        name="EventsTab" 
         component={SearchEventsScreen}
-        options={{ title: 'Events' }}
+        options={{ title: 'Home' }}
       />
       <Tab.Screen 
         name="TicketsTab" 
         component={MyTicketsScreen}
         options={{ title: 'My Tickets' }}
+      />
+      <Tab.Screen 
+        name="DiscoverTab" 
+        component={HomeScreen}
+        options={{ title: 'Discover' }}
       />
       <Tab.Screen 
         name="ProfileTab" 
@@ -95,7 +95,7 @@ function AdminTabs() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#6200ee',
+        tabBarActiveTintColor: '#000000',
         tabBarInactiveTintColor: 'gray',
         headerShown: false,
       })}
@@ -133,7 +133,7 @@ export default function App() {
           initialRouteName="Splash"
           screenOptions={{
             headerStyle: {
-              backgroundColor: '#6200ee',
+              backgroundColor: '#000000',
             },
             headerTintColor: '#fff',
             headerTitleStyle: {
@@ -159,7 +159,7 @@ export default function App() {
             component={RegistrationScreen}
             options={{ 
               title: 'Create Account',
-              headerStyle: { backgroundColor: '#6200ee' },
+              headerStyle: { backgroundColor: '#000000' },
               headerTintColor: '#fff',
             }}
           />
