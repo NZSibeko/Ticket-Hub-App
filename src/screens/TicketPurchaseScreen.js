@@ -55,7 +55,7 @@ const TicketPurchaseScreen = ({ route, navigation }) => {
       ) : (
         <>
           <Text style={styles.info}>You are about to purchase a ticket for this event.</Text>
-          <Text style={styles.price}>Price: $50.00</Text>
+          <Text style={styles.price}>Price: R250.00</Text>
           
           {loading ? (
             <ActivityIndicator size="large" style={styles.loader} />

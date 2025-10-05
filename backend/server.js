@@ -1,228 +1,807 @@
-    const express = require('express');
+require('dotenv').config();
+const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
+const { dbOperations } = require('./database');
 
 const app = express();
+
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// Mock Data
-let events = [
-  {
-    event_id: '1',
-    event_name: 'Summer Music Festival',
-    event_description: 'Annual summer music festival featuring various artists',
-    start_date: '2025-11-15T10:00:00',
-    end_date: '2025-11-16T22:00:00',
-    location: 'Central Park, New York',
-    event_status: 'VALIDATED',
-    current_attendees: 150,
-    max_attendees: 200,
-    price: 50
-  },
-  {
-    event_id: '2',
-    event_name: 'Tech Conference 2025',
-    event_description: 'Latest trends in technology and innovation',
-    start_date: '2025-12-20T09:00:00',
-    end_date: '2025-12-21T18:00:00',
-    location: 'Convention Center',
-    event_status: 'VALIDATED',
-    current_attendees: 80,
-    max_attendees: 100,
-    price: 75
-  },
-  {
-    event_id: '3',
-    event_name: 'Food & Wine Expo',
-    event_description: 'Culinary delights and wine tastings from around the world',
-    start_date: '2025-11-01T12:00:00',
-    end_date: '2025-11-01T20:00:00',
-    location: 'Grand Hotel Ballroom',
-    event_status: 'VALIDATED',
-    current_attendees: 45,
-    max_attendees: 150,
-    price: 35
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// ============= MIDDLEWARE =============
+
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
   }
-];
 
-let customers = [];
-let tickets = [];
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      console.error('Token verification error:', err);
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
 
-// Generate ticket code
+// ============= HELPER FUNCTIONS =============
+
 const generateTicketCode = () => {
   return `TKT-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 };
 
-// Generate QR code (mock)
 const generateQRCode = () => {
   return `QR-${Math.random().toString(36).substr(2, 12).toUpperCase()}`;
 };
 
-// Routes
+// ============= AUTHENTICATION ROUTES =============
 
-// Get all events
-app.get('/zi_events', (req, res) => {
+// Register new customer
+app.post('/api/auth/register', async (req, res) => {
   try {
-    // Filter by date if needed
-    const { $filter, $orderby } = req.query;
-    let filteredEvents = [...events];
+    const { firstName, lastName, email, phone, password } = req.body;
 
-    // Simple date filtering (you can enhance this)
-    if ($filter && $filter.includes('end_date ge')) {
-      const today = new Date().toISOString().split('T')[0];
-      filteredEvents = events.filter(e => e.end_date >= today);
+    // Validate input
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'All required fields must be provided' 
+      });
     }
 
-    res.json({ d: { results: filteredEvents } });
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid email format' 
+      });
+    }
+
+    // Check if email already exists
+    const existingUser = await dbOperations.get(
+      'SELECT * FROM customers WHERE email = ?',
+      [email]
+    );
+
+    if (existingUser) {
+      return res.status(409).json({ 
+        success: false,
+        error: 'Email already registered' 
+      });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create customer
+    const customerId = uuidv4();
+    await dbOperations.run(
+      `INSERT INTO customers (customer_id, first_name, last_name, email, phone_number, password_hash, account_status)
+       VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+      [customerId, firstName, lastName, email, phone || '', passwordHash]
+    );
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        customerId, 
+        email, 
+        firstName, 
+        lastName,
+        role: 'customer'
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      token,
+      user: {
+        customer_id: customerId,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone_number: phone || '',
+        account_status: 'ACTIVE'
+      }
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Registration error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Registration failed. Please try again.' 
+    });
+  }
+});
+
+// Login customer
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username and password are required' 
+      });
+    }
+
+    // Find user by email
+    const user = await dbOperations.get(
+      'SELECT * FROM customers WHERE email = ?',
+      [username]
+    );
+
+    if (!user) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Invalid credentials' 
+      });
+    }
+
+    // Check account status
+    if (user.account_status !== 'ACTIVE') {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Account is inactive. Please contact support.' 
+      });
+    }
+
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+
+    if (!validPassword) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Invalid credentials' 
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        customerId: user.customer_id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: 'customer'
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        customer_id: user.customer_id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        phone_number: user.phone_number,
+        profile_picture: user.profile_picture,
+        account_status: user.account_status
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Login failed. Please try again.' 
+    });
+  }
+});
+
+// ============= EVENT ROUTES =============
+
+// Get all validated events
+app.get('/zi_events', async (req, res) => {
+  try {
+    const { $filter, $orderby, $top, $skip } = req.query;
+    
+    let query = `SELECT * FROM events WHERE event_status = 'VALIDATED'`;
+    const params = [];
+
+    // Apply filters if provided
+    if ($filter) {
+      // Simple filter parsing (extend as needed)
+      if ($filter.includes('end_date ge')) {
+        query += ` AND end_date >= datetime('now')`;
+      }
+    }
+
+    // Apply ordering
+    if ($orderby) {
+      query += ` ORDER BY ${$orderby}`;
+    } else {
+      query += ` ORDER BY start_date ASC`;
+    }
+
+    // Apply pagination
+    if ($top) {
+      query += ` LIMIT ${parseInt($top)}`;
+    }
+    if ($skip) {
+      query += ` OFFSET ${parseInt($skip)}`;
+    }
+
+    const events = await dbOperations.all(query, params);
+
+    res.json({ 
+      d: { 
+        results: events,
+        __count: events.length
+      } 
+    });
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
 
 // Get single event
-app.get('/zi_events/:id', (req, res) => {
-  const event = events.find(e => e.event_id === req.params.id);
-  if (event) {
-    res.json({ d: event });
-  } else {
-    res.status(404).json({ error: 'Event not found' });
-  }
-});
-
-// Customer registration
-app.post('/zi_customer_faces', (req, res) => {
+app.get('/zi_events/:id', async (req, res) => {
   try {
-    const customer = {
-      customer_id: Date.now().toString(),
-      first_name: req.body.first_name,
-      last_name: req.body.last_name,
-      email: req.body.email,
-      phone_number: req.body.phone_number,
-      account_status: 'ACTIVE',
-      profile_picture: null
-    };
-    customers.push(customer);
-    res.json({ d: customer });
+    const event = await dbOperations.get(
+      'SELECT * FROM events WHERE event_id = ?',
+      [req.params.id]
+    );
+
+    if (event) {
+      res.json({ d: event });
+    } else {
+      res.status(404).json({ error: 'Event not found' });
+    }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching event:', error);
+    res.status(500).json({ error: 'Failed to fetch event' });
   }
 });
 
-// Customer login (get customer by ID)
-app.get('/zi_customer_faces', (req, res) => {
-  const { $filter } = req.query;
-  
-  if ($filter && $filter.includes('customer_id')) {
-    // Extract customer_id from filter
-    const match = $filter.match(/customer_id eq '([^']+)'/);
-    if (match) {
-      const customerId = match[1];
-      const customer = customers.find(c => c.customer_id === customerId);
-      
-      if (customer) {
-        res.json({ d: { results: [customer] } });
-      } else {
-        // Create demo user for any login attempt
-        const demoCustomer = {
-          customer_id: customerId,
-          first_name: 'Demo',
-          last_name: 'User',
-          email: `${customerId}@demo.com`,
-          phone_number: '+1234567890',
-          account_status: 'ACTIVE'
-        };
-        customers.push(demoCustomer);
-        res.json({ d: { results: [demoCustomer] } });
-      }
-    } else {
-      res.json({ d: { results: [] } });
+// Search events
+app.get('/api/events/search', async (req, res) => {
+  try {
+    const { query, location, minPrice, maxPrice, dateFrom, dateTo } = req.query;
+    
+    let sql = `SELECT * FROM events WHERE event_status = 'VALIDATED'`;
+    const params = [];
+
+    if (query) {
+      sql += ` AND (event_name LIKE ? OR event_description LIKE ?)`;
+      params.push(`%${query}%`, `%${query}%`);
     }
-  } else {
-    res.json({ d: { results: customers } });
+
+    if (location) {
+      sql += ` AND location LIKE ?`;
+      params.push(`%${location}%`);
+    }
+
+    if (minPrice) {
+      sql += ` AND price >= ?`;
+      params.push(parseFloat(minPrice));
+    }
+
+    if (maxPrice) {
+      sql += ` AND price <= ?`;
+      params.push(parseFloat(maxPrice));
+    }
+
+    if (dateFrom) {
+      sql += ` AND start_date >= ?`;
+      params.push(dateFrom);
+    }
+
+    if (dateTo) {
+      sql += ` AND start_date <= ?`;
+      params.push(dateTo);
+    }
+
+    sql += ` ORDER BY start_date ASC`;
+
+    const events = await dbOperations.all(sql, params);
+    res.json({ success: true, events });
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ error: 'Search failed' });
   }
 });
+
+// ============= ADMIN EVENT ROUTES =============
+
+// Create event (admin)
+app.post('/api/admin/events', authenticateToken, async (req, res) => {
+  try {
+    const {
+      event_name,
+      event_description,
+      start_date,
+      end_date,
+      location,
+      max_attendees,
+      price,
+      currency = 'USD',
+      event_image
+    } = req.body;
+
+    // Validation
+    if (!event_name || !start_date || !end_date || !location || !max_attendees || price === undefined) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'All required fields must be provided' 
+      });
+    }
+
+    const eventId = uuidv4();
+    await dbOperations.run(
+      `INSERT INTO events (
+        event_id, event_name, event_description, start_date, end_date, 
+        location, max_attendees, current_attendees, price, currency, 
+        event_image, created_by, event_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'VALIDATED')`,
+      [
+        eventId, event_name, event_description || '', start_date, end_date, 
+        location, parseInt(max_attendees), parseFloat(price), currency, 
+        event_image || null, req.user.customerId
+      ]
+    );
+
+    const event = await dbOperations.get(
+      'SELECT * FROM events WHERE event_id = ?',
+      [eventId]
+    );
+
+    res.status(201).json({ success: true, event });
+  } catch (error) {
+    console.error('Error creating event:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to create event' 
+    });
+  }
+});
+
+// Update event (admin)
+app.put('/api/admin/events/:id', authenticateToken, async (req, res) => {
+  try {
+    const { 
+      event_name, 
+      event_description, 
+      start_date, 
+      end_date, 
+      location, 
+      max_attendees, 
+      price, 
+      event_status,
+      event_image
+    } = req.body;
+
+    await dbOperations.run(
+      `UPDATE events SET 
+       event_name = ?, 
+       event_description = ?, 
+       start_date = ?, 
+       end_date = ?,
+       location = ?, 
+       max_attendees = ?, 
+       price = ?, 
+       event_status = ?,
+       event_image = ?,
+       updated_at = CURRENT_TIMESTAMP
+       WHERE event_id = ?`,
+      [
+        event_name, event_description, start_date, end_date, 
+        location, max_attendees, price, event_status, event_image,
+        req.params.id
+      ]
+    );
+
+    const event = await dbOperations.get(
+      'SELECT * FROM events WHERE event_id = ?', 
+      [req.params.id]
+    );
+
+    res.json({ success: true, event });
+  } catch (error) {
+    console.error('Error updating event:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to update event' 
+    });
+  }
+});
+
+// Delete event (admin)
+app.delete('/api/admin/events/:id', authenticateToken, async (req, res) => {
+  try {
+    // Check if event has tickets
+    const tickets = await dbOperations.get(
+      'SELECT COUNT(*) as count FROM tickets WHERE event_id = ?',
+      [req.params.id]
+    );
+
+    if (tickets.count > 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Cannot delete event with existing tickets' 
+      });
+    }
+
+    await dbOperations.run(
+      'DELETE FROM events WHERE event_id = ?', 
+      [req.params.id]
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Event deleted successfully' 
+    });
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to delete event' 
+    });
+  }
+});
+
+// ============= TICKET ROUTES =============
 
 // Purchase ticket
-app.post('/zi_tickets', (req, res) => {
+app.post('/api/tickets/purchase', authenticateToken, async (req, res) => {
   try {
-    const ticket = {
-      ticket_id: Date.now().toString(),
-      event_id: req.body.event_id,
-      customer_id: req.body.customer_id,
-      ticket_code: generateTicketCode(),
-      qr_code: generateQRCode(),
-      ticket_status: 'PURCHASED',
-      purchase_date: new Date().toISOString(),
-      price: req.body.price || 50,
-      currency: req.body.currency || 'USD',
-      validation_date: null
-    };
+    const { event_id, quantity = 1 } = req.body;
+    const customer_id = req.user.customerId;
 
-    // Update event attendees
-    const event = events.find(e => e.event_id === req.body.event_id);
-    if (event) {
-      event.current_attendees += 1;
+    // Get event details
+    const event = await dbOperations.get(
+      'SELECT * FROM events WHERE event_id = ?',
+      [event_id]
+    );
+
+    if (!event) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Event not found' 
+      });
     }
 
-    tickets.push(ticket);
-    res.json({ d: ticket });
+    if (event.event_status !== 'VALIDATED') {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Event is not available for booking' 
+      });
+    }
+
+    // Check capacity
+    const availableSpots = event.max_attendees - event.current_attendees;
+    if (availableSpots < quantity) {
+      return res.status(400).json({ 
+        success: false,
+        error: `Only ${availableSpots} tickets available` 
+      });
+    }
+
+    const tickets = [];
+
+    // Create tickets
+    for (let i = 0; i < quantity; i++) {
+      const ticketId = uuidv4();
+      const ticketCode = generateTicketCode();
+      const qrCode = generateQRCode();
+
+      await dbOperations.run(
+        `INSERT INTO tickets (
+          ticket_id, event_id, customer_id, ticket_code, qr_code, 
+          price, currency, ticket_status, payment_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PURCHASED', 'COMPLETED')`,
+        [
+          ticketId, event_id, customer_id, ticketCode, qrCode, 
+          event.price, event.currency
+        ]
+      );
+
+      const ticket = await dbOperations.get(
+        'SELECT * FROM tickets WHERE ticket_id = ?',
+        [ticketId]
+      );
+
+      tickets.push(ticket);
+    }
+
+    // Update event attendees
+    await dbOperations.run(
+      'UPDATE events SET current_attendees = current_attendees + ? WHERE event_id = ?',
+      [quantity, event_id]
+    );
+
+    res.status(201).json({ 
+      success: true, 
+      tickets,
+      event: event.event_name
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error purchasing ticket:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to purchase ticket' 
+    });
   }
 });
 
 // Get customer tickets
-app.get('/zi_tickets', (req, res) => {
-  const { $filter, $expand } = req.query;
-  
-  if ($filter && $filter.includes('customer_id')) {
-    const match = $filter.match(/customer_id eq '([^']+)'/);
-    if (match) {
-      const customerId = match[1];
-      let customerTickets = tickets.filter(t => t.customer_id === customerId);
-      
-      // Expand event data if requested
-      if ($expand && $expand.includes('_event')) {
-        customerTickets = customerTickets.map(ticket => ({
-          ...ticket,
-          _event: events.find(e => e.event_id === ticket.event_id)
-        }));
+app.get('/zi_tickets', authenticateToken, async (req, res) => {
+  try {
+    const customer_id = req.user.customerId;
+    const { $expand } = req.query;
+
+    let query = `
+      SELECT t.*, e.event_name, e.start_date, e.end_date, e.location, e.event_image
+      FROM tickets t
+      JOIN events e ON t.event_id = e.event_id
+      WHERE t.customer_id = ?
+      ORDER BY t.purchase_date DESC
+    `;
+
+    const tickets = await dbOperations.all(query, [customer_id]);
+
+    // Format response for OData structure
+    const formattedTickets = tickets.map(ticket => ({
+      ticket_id: ticket.ticket_id,
+      event_id: ticket.event_id,
+      customer_id: ticket.customer_id,
+      ticket_code: ticket.ticket_code,
+      qr_code: ticket.qr_code,
+      ticket_status: ticket.ticket_status,
+      purchase_date: ticket.purchase_date,
+      validation_date: ticket.validation_date,
+      price: ticket.price,
+      currency: ticket.currency,
+      payment_status: ticket.payment_status,
+      _event: {
+        event_name: ticket.event_name,
+        start_date: ticket.start_date,
+        end_date: ticket.end_date,
+        location: ticket.location,
+        event_image: ticket.event_image
       }
-      
-      res.json({ d: { results: customerTickets } });
-    } else {
-      res.json({ d: { results: [] } });
-    }
-  } else {
-    res.json({ d: { results: tickets } });
+    }));
+
+    res.json({ d: { results: formattedTickets } });
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    res.status(500).json({ error: 'Failed to fetch tickets' });
   }
 });
 
-// Validate ticket (scan)
-app.post('/zi_tickets/:id/validate', (req, res) => {
-  const ticket = tickets.find(t => t.ticket_id === req.params.id || t.ticket_code === req.params.id);
-  
-  if (ticket) {
+// Get single ticket
+app.get('/api/tickets/:ticketId', authenticateToken, async (req, res) => {
+  try {
+    const ticket = await dbOperations.get(
+      `SELECT t.*, e.event_name, e.start_date, e.location
+       FROM tickets t
+       JOIN events e ON t.event_id = e.event_id
+       WHERE t.ticket_id = ? AND t.customer_id = ?`,
+      [req.params.ticketId, req.user.customerId]
+    );
+
+    if (!ticket) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Ticket not found' 
+      });
+    }
+
+    res.json({ success: true, ticket });
+  } catch (error) {
+    console.error('Error fetching ticket:', error);
+    res.status(500).json({ error: 'Failed to fetch ticket' });
+  }
+});
+
+// Validate ticket (scan QR code)
+app.post('/api/tickets/:code/validate', authenticateToken, async (req, res) => {
+  try {
+    const ticket = await dbOperations.get(
+      `SELECT t.*, e.event_name, e.start_date, e.location, e.end_date,
+              c.first_name, c.last_name, c.email
+       FROM tickets t
+       JOIN events e ON t.event_id = e.event_id
+       JOIN customers c ON t.customer_id = c.customer_id
+       WHERE t.ticket_code = ? OR t.qr_code = ?`,
+      [req.params.code, req.params.code]
+    );
+
+    if (!ticket) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Ticket not found' 
+      });
+    }
+
     if (ticket.ticket_status === 'VALIDATED') {
-      res.status(400).json({ error: 'Ticket already validated' });
-    } else {
-      ticket.ticket_status = 'VALIDATED';
-      ticket.validation_date = new Date().toISOString();
-      res.json({ d: ticket });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Ticket already validated',
+        ticket: {
+          ticket_code: ticket.ticket_code,
+          validation_date: ticket.validation_date
+        }
+      });
     }
-  } else {
-    res.status(404).json({ error: 'Ticket not found' });
+
+    if (ticket.ticket_status === 'CANCELLED' || ticket.ticket_status === 'REFUNDED') {
+      return res.status(400).json({ 
+        success: false,
+        error: `Ticket has been ${ticket.ticket_status.toLowerCase()}` 
+      });
+    }
+
+    // Validate ticket
+    await dbOperations.run(
+      'UPDATE tickets SET ticket_status = ?, validation_date = CURRENT_TIMESTAMP WHERE ticket_id = ?',
+      ['VALIDATED', ticket.ticket_id]
+    );
+
+    const updatedTicket = await dbOperations.get(
+      'SELECT * FROM tickets WHERE ticket_id = ?',
+      [ticket.ticket_id]
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Ticket validated successfully',
+      ticket: {
+        ...updatedTicket,
+        event_name: ticket.event_name,
+        customer_name: `${ticket.first_name} ${ticket.last_name}`,
+        event_date: ticket.start_date,
+        location: ticket.location
+      }
+    });
+  } catch (error) {
+    console.error('Error validating ticket:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to validate ticket' 
+    });
   }
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Mock backend is running' });
+// ============= ADMIN DASHBOARD ROUTES =============
+
+// Get dashboard statistics
+app.get('/api/admin/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    const stats = await Promise.all([
+      dbOperations.get('SELECT COUNT(*) as count FROM events'),
+      dbOperations.get('SELECT COUNT(*) as count FROM tickets'),
+      dbOperations.get('SELECT SUM(price) as total FROM tickets WHERE payment_status = "COMPLETED"'),
+      dbOperations.get('SELECT COUNT(DISTINCT customer_id) as count FROM tickets'),
+      dbOperations.get('SELECT COUNT(*) as count FROM tickets WHERE ticket_status = "VALIDATED"')
+    ]);
+
+    res.json({
+      totalEvents: stats[0].count,
+      totalTickets: stats[1].count,
+      totalRevenue: stats[2].total || 0,
+      totalCustomers: stats[3].count,
+      validatedTickets: stats[4].count
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch statistics' });
+  }
 });
 
-const PORT = 3000;
+// Get all tickets (admin)
+app.get('/api/admin/tickets', authenticateToken, async (req, res) => {
+  try {
+    const tickets = await dbOperations.all(
+      `SELECT t.*, e.event_name, c.first_name, c.last_name, c.email
+       FROM tickets t
+       JOIN events e ON t.event_id = e.event_id
+       JOIN customers c ON t.customer_id = c.customer_id
+       ORDER BY t.purchase_date DESC
+       LIMIT 100`
+    );
+
+    res.json({ tickets });
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    res.status(500).json({ error: 'Failed to fetch tickets' });
+  }
+});
+
+// ============= PROFILE ROUTES =============
+
+// Get customer profile
+app.get('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    const customer = await dbOperations.get(
+      'SELECT customer_id, first_name, last_name, email, phone_number, profile_picture, account_status, created_at FROM customers WHERE customer_id = ?',
+      [req.user.customerId]
+    );
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    res.json({ success: true, customer });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+// Update customer profile
+app.put('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    const { first_name, last_name, phone_number, profile_picture } = req.body;
+
+    await dbOperations.run(
+      `UPDATE customers SET 
+       first_name = ?, 
+       last_name = ?, 
+       phone_number = ?,
+       profile_picture = ?,
+       updated_at = CURRENT_TIMESTAMP
+       WHERE customer_id = ?`,
+      [first_name, last_name, phone_number, profile_picture, req.user.customerId]
+    );
+
+    const customer = await dbOperations.get(
+      'SELECT customer_id, first_name, last_name, email, phone_number, profile_picture FROM customers WHERE customer_id = ?',
+      [req.user.customerId]
+    );
+
+    res.json({ success: true, customer });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// ============= HEALTH CHECK =============
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Ticket-Hub Backend API is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Mock backend server running on http://localhost:${PORT}`);
-  console.log(`Test it: http://localhost:${PORT}/health`);
+  console.log(`\n🚀 Ticket-Hub Backend Server Started`);
+  console.log(`📡 Server running on: http://localhost:${PORT}`);
+  console.log(`❤️  Health check: http://localhost:${PORT}/health`);
+  console.log(`📱 Ready to accept connections from mobile app\n`);
 });

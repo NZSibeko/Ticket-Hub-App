@@ -1,94 +1,125 @@
-import React, { createContext, useContext, useState } from 'react';
-import ODataService from '../services/ODataService';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AuthContext = createContext();
 
+const API_URL = 'http://localhost:3000';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(null);
 
-  const login = async (username, password) => {
-    setLoading(true);
+  // Load saved token on app start
+  useEffect(() => {
+    loadSavedAuth();
+  }, []);
+
+  const loadSavedAuth = async () => {
     try {
-      // Test authentication by making a simple request
-      ODataService.setAuth(username, password);
-      
-      // Try to fetch user data - adjust the entity set and filter as per your OData service
-      const userData = await ODataService.get("zi_customer_faces", {
-        $filter: `customer_id eq '${username}'`,
-        $top: 1
-      });
-      
-      if (userData && userData.length > 0) {
-        const userInfo = {
-          ...userData[0],
-          username,
-          // Don't store password in state for security
-        };
-        setUser(userInfo);
-        return true;
+      const savedToken = await AsyncStorage.getItem('authToken');
+      const savedUser = await AsyncStorage.getItem('userData');
+
+      if (savedToken && savedUser) {
+        setToken(savedToken);
+        setUser(JSON.parse(savedUser));
       }
-      return false;
     } catch (error) {
-      console.error('Login error:', error);
-      // For demo purposes, allow any login if backend is not available
-      if (error.message.includes('Network error') || error.message.includes('timeout')) {
-        const demoUser = {
-          customer_id: username,
-          first_name: 'Demo',
-          last_name: 'User',
-          email: `${username}@demo.com`,
-          username: username
-        };
-        setUser(demoUser);
-        return true;
-      }
-      return false;
+      console.error('Error loading saved auth:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = () => {
-    ODataService.clearAuth();
-    setUser(null);
+  const login = async (username, password) => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/auth/login`, {
+        username,
+        password
+      });
+
+      if (response.data.success) {
+        const { token: authToken, user: userData } = response.data;
+
+        // Save to state
+        setToken(authToken);
+        setUser(userData);
+
+        // Save to AsyncStorage
+        await AsyncStorage.setItem('authToken', authToken);
+        await AsyncStorage.setItem('userData', JSON.stringify(userData));
+
+        return { success: true };
+      }
+
+      return { success: false, error: 'Login failed' };
+    } catch (error) {
+      console.error('Login error:', error);
+      const errorMessage = error.response?.data?.error || 'Login failed. Please try again.';
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
   };
 
   const register = async (userData) => {
     setLoading(true);
     try {
-      // Adjust the entity set and fields according to your OData service
-      const result = await ODataService.post("zi_customer_faces", {
-        first_name: userData.firstName,
-        last_name: userData.lastName,
-        email: userData.email,
-        phone_number: userData.phone,
-        customer_id: userData.username, // or let backend generate
-        account_status: 'ACTIVE'
-      });
-      
-      return result;
+      const response = await axios.post(`${API_URL}/api/auth/register`, userData);
+
+      if (response.data.success) {
+        const { token: authToken, user: newUser } = response.data;
+
+        // Save to state
+        setToken(authToken);
+        setUser(newUser);
+
+        // Save to AsyncStorage
+        await AsyncStorage.setItem('authToken', authToken);
+        await AsyncStorage.setItem('userData', JSON.stringify(newUser));
+
+        return { success: true };
+      }
+
+      return { success: false, error: 'Registration failed' };
     } catch (error) {
       console.error('Registration error:', error);
-      
-      // For demo purposes, simulate success if backend is not available
-      if (error.message.includes('Network error') || error.message.includes('timeout')) {
-        return { success: true, message: 'User registered successfully (demo mode)' };
-      }
-      
-      throw error;
+      const errorMessage = error.response?.data?.error || 'Registration failed. Please try again.';
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
   };
 
+  const logout = async () => {
+    try {
+      // Clear state
+      setUser(null);
+      setToken(null);
+
+      // Clear AsyncStorage
+      await AsyncStorage.removeItem('authToken');
+      await AsyncStorage.removeItem('userData');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const getAuthHeader = () => {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
+      token,
       loading, 
       login, 
       logout, 
       register,
+      getAuthHeader,
       isAuthenticated: !!user 
     }}>
       {children}
@@ -102,4 +133,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+} 

@@ -1,0 +1,115 @@
+const { dbOperations } = require('./database');
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+
+async function seedDatabase() {
+  console.log('🌱 Starting database seeding...\n');
+
+  try {
+    // Check if data already exists
+    const existingCustomers = await dbOperations.get('SELECT COUNT(*) as count FROM customers');
+    if (existingCustomers.count > 0) {
+      console.log('⚠️  Database already has data. Run this command to reset:');
+      console.log('   rm ticketing.db && node seedData.js\n');
+      return;
+    }
+
+    // SEED CUSTOMERS
+    console.log('📝 Seeding customers...');
+    const customers = [
+      {
+        customer_id: uuidv4(),
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john.doe@example.com',
+        phone_number: '+27123456789',
+        password: 'password123'
+      },
+      {
+        customer_id: uuidv4(),
+        first_name: 'Jane',
+        last_name: 'Smith',
+        email: 'jane.smith@example.com',
+        phone_number: '+27123456790',
+        password: 'password123'
+      }
+    ];
+
+    for (const customer of customers) {
+      const passwordHash = await bcrypt.hash(customer.password, 10);
+      await dbOperations.run(
+        `INSERT INTO customers (customer_id, first_name, last_name, email, phone_number, password_hash, account_status)
+         VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [customer.customer_id, customer.first_name, customer.last_name, customer.email, customer.phone_number, passwordHash]
+      );
+    }
+    console.log(`✅ Created ${customers.length} customers\n`);
+
+    // SEED EVENTS
+    console.log('📅 Seeding events...');
+    const events = [
+      {
+        event_id: uuidv4(),
+        event_name: 'Summer Music Festival 2025',
+        event_description: 'Join us for the biggest music festival of the summer! Featuring top artists from around the world.',
+        start_date: '2025-07-15 18:00:00',
+        end_date: '2025-07-17 23:00:00',
+        location: 'Johannesburg Stadium, South Africa',
+        max_attendees: 5000,
+        current_attendees: 0,
+        price: 850.00,
+        currency: 'ZAR',
+        event_status: 'VALIDATED',
+        created_by: customers[0].customer_id
+      },
+      {
+        event_id: uuidv4(),
+        event_name: 'Tech Conference 2025',
+        event_description: 'Discover the latest in technology and innovation.',
+        start_date: '2025-08-20 09:00:00',
+        end_date: '2025-08-22 17:00:00',
+        location: 'Cape Town Convention Centre',
+        max_attendees: 1000,
+        current_attendees: 0,
+        price: 1200.00,
+        currency: 'ZAR',
+        event_status: 'VALIDATED',
+        created_by: customers[0].customer_id
+      },
+      {
+        event_id: uuidv4(),
+        event_name: 'Food & Wine Expo',
+        event_description: 'Taste the finest cuisines and wines.',
+        start_date: '2025-09-10 12:00:00',
+        end_date: '2025-09-10 20:00:00',
+        location: 'Sandton Convention Centre',
+        max_attendees: 800,
+        current_attendees: 0,
+        price: 450.00,
+        currency: 'ZAR',
+        event_status: 'VALIDATED',
+        created_by: customers[1].customer_id
+      }
+    ];
+
+    for (const event of events) {
+      await dbOperations.run(
+        `INSERT INTO events (event_id, event_name, event_description, start_date, end_date, location, max_attendees, current_attendees, price, currency, event_status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [event.event_id, event.event_name, event.event_description, event.start_date, event.end_date, event.location, event.max_attendees, event.current_attendees, event.price, event.currency, event.event_status, event.created_by]
+      );
+    }
+    console.log(`✅ Created ${events.length} events\n`);
+
+    console.log('✨ Database seeding completed!\n');
+    console.log('🔐 Test Login:');
+    console.log('   Email: john.doe@example.com');
+    console.log('   Password: password123\n');
+
+  } catch (error) {
+    console.error('❌ Seeding failed:', error);
+    process.exit(1);
+  }
+}
+
+seedDatabase().then(() => process.exit(0));
