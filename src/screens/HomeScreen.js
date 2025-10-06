@@ -1,258 +1,261 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Alert,
-  Modal,
-  ActivityIndicator 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
-import { Camera } from 'expo-camera';
-import { BarCodeScanner } from 'expo-barcode-scanner';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
+const { width } = Dimensions.get('window');
 const API_URL = 'http://localhost:3000';
 
-const WalletScreen = () => {
-  const { user, getAuthHeader } = useAuth();
-  const [hasPermission, setHasPermission] = useState(null);
-  const [scanned, setScanned] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [ticketInfo, setTicketInfo] = useState(null);
-  const [scannerActive, setScannerActive] = useState(false);
+const HomeScreen = ({ navigation }) => {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [salesStats, setSalesStats] = useState(null);
+  const { getAuthHeader } = useAuth();
 
   useEffect(() => {
-    checkPermissions();
+    fetchEventsAndStats();
   }, []);
 
-  const checkPermissions = async () => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    setHasPermission(status === 'granted');
-  };
-
-  const isAdmin = () => {
-    return user && user.role === 'admin';
-  };
-
-  const handleBarCodeScanned = async ({ type, data }) => {
-    setScanned(true);
-    setLoading(true);
-
+  const fetchEventsAndStats = async () => {
     try {
-      const headers = getAuthHeader();
-      const response = await axios.post(
-        `${API_URL}/api/tickets/${data}/validate`,
-        {},
-        { headers }
+      const headers = await getAuthHeader();
+      
+      // Fetch events
+      const eventsResponse = await axios.get(`${API_URL}/zi_events`, { headers });
+      const validatedEvents = eventsResponse.data.d.results.filter(
+        e => e.event_status === 'VALIDATED'
       );
+      setEvents(validatedEvents);
 
-      if (response.data.success) {
-        setTicketInfo(response.data.ticket);
-      }
+      // Fetch sales statistics
+      const statsResponse = await axios.get(`${API_URL}/api/admin/dashboard/stats`, { headers });
+      setSalesStats(statsResponse.data);
     } catch (error) {
-      console.error('Validation error:', error);
-      Alert.alert(
-        'Validation Failed',
-        error.response?.data?.error || 'Invalid ticket',
-        [{ text: 'OK', onPress: () => resetScanner() }]
-      );
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
   };
 
- const resetScanner = () => {
-    setScanned(false);
-    setTicketInfo(null);
-    setLoading(false);
+  const getTopSellingEvents = () => {
+    return [...events]
+      .sort((a, b) => b.current_attendees - a.current_attendees)
+      .slice(0, 5);
   };
 
-  if (!isAdmin()) {
+  const CompetitionBanner = () => (
+    <View style={styles.competitionBanner}>
+      <View style={styles.competitionHeader}>
+        <Ionicons name="trophy" size={32} color="#FFD700" />
+        <Text style={styles.competitionTitle}>Top Selling Events</Text>
+      </View>
+      <Text style={styles.competitionSubtitle}>
+        Competition is fierce! See what's trending
+      </Text>
+    </View>
+  );
+
+  const SalesStatsCard = () => {
+    if (!salesStats) return null;
+
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Wallet</Text>
-        </View>
-        <View style={styles.accessDenied}>
-          <Text style={styles.lockIcon}>🔒</Text>
-          <Text style={styles.accessDeniedTitle}>Access Restricted</Text>
-          <Text style={styles.accessDeniedText}>
-            Scanner access is only available to administrators
-          </Text>
+      <View style={styles.salesStatsContainer}>
+        <Text style={styles.statsTitle}>Live Sales Dashboard</Text>
+        
+        <View style={styles.statsGrid}>
+          <View style={styles.statItem}>
+            <View style={[styles.statIconBox, { backgroundColor: '#6200ee15' }]}>
+              <Ionicons name="calendar" size={24} color="#6200ee" />
+            </View>
+            <Text style={styles.statValue}>{salesStats.totalEvents || 0}</Text>
+            <Text style={styles.statLabel}>Active Events</Text>
+          </View>
+
+          <View style={styles.statItem}>
+            <View style={[styles.statIconBox, { backgroundColor: '#2196F315' }]}>
+              <Ionicons name="ticket" size={24} color="#2196F3" />
+            </View>
+            <Text style={styles.statValue}>{salesStats.totalTickets || 0}</Text>
+            <Text style={styles.statLabel}>Tickets Sold</Text>
+          </View>
+
+          <View style={styles.statItem}>
+            <View style={[styles.statIconBox, { backgroundColor: '#4CAF5015' }]}>
+              <Ionicons name="cash" size={24} color="#4CAF50" />
+            </View>
+            <Text style={styles.statValue}>R{(salesStats.totalRevenue || 0).toFixed(0)}</Text>
+            <Text style={styles.statLabel}>Total Sales</Text>
+          </View>
+
+          <View style={styles.statItem}>
+            <View style={[styles.statIconBox, { backgroundColor: '#FF980015' }]}>
+              <Ionicons name="trending-up" size={24} color="#FF9800" />
+            </View>
+            <Text style={styles.statValue}>
+              {salesStats.totalTickets > 0 
+                ? `R${(salesStats.totalRevenue / salesStats.totalTickets).toFixed(0)}`
+                : 'R0'
+              }
+            </Text>
+            <Text style={styles.statLabel}>Avg. Ticket</Text>
+          </View>
         </View>
       </View>
     );
-  }
+  };
 
-  if (hasPermission === null) {
+  const EventCard = ({ event, rank }) => {
+    const soldPercentage = (event.current_attendees / event.max_attendees) * 100;
+    
+    return (
+      <TouchableOpacity
+        style={styles.eventCard}
+        onPress={() => navigation.navigate('PurchaseTicket', { event })}
+      >
+        {rank && (
+          <View style={styles.rankBadge}>
+            <Text style={styles.rankText}>#{rank}</Text>
+          </View>
+        )}
+
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ 
+              uri: event.image_url || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=400'
+            }}
+            style={styles.eventImage}
+            resizeMode="cover"
+          />
+          <View style={styles.priceTag}>
+            <Text style={styles.priceText}>R{event.price.toFixed(2)}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.eventInfo}>
+          <Text style={styles.eventName} numberOfLines={2}>{event.event_name}</Text>
+          
+          <View style={styles.eventMeta}>
+            <View style={styles.metaItem}>
+              <Ionicons name="calendar-outline" size={14} color="#666" />
+              <Text style={styles.metaText}>
+                {new Date(event.start_date).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric'
+                })}
+              </Text>
+            </View>
+            
+            <View style={styles.metaItem}>
+              <Ionicons name="location-outline" size={14} color="#666" />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {event.location}
+              </Text>
+            </View>
+          </View>
+
+          {/* Sales Progress */}
+          <View style={styles.salesProgress}>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${Math.min(soldPercentage, 100)}%` }]} />
+            </View>
+            <View style={styles.salesInfo}>
+              <Text style={styles.salesText}>
+                {event.current_attendees}/{event.max_attendees} sold
+              </Text>
+              <Text style={[
+                styles.percentageText,
+                soldPercentage > 80 && styles.hotSale
+              ]}>
+                {soldPercentage.toFixed(0)}%
+              </Text>
+            </View>
+          </View>
+
+          {soldPercentage > 80 && (
+            <View style={styles.hotBadge}>
+              <Ionicons name="flame" size={14} color="#FF4444" />
+              <Text style={styles.hotText}>Almost Sold Out!</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  if (loading) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Wallet</Text>
+          <Text style={styles.headerTitle}>Discover</Text>
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#000" />
-          <Text style={styles.loadingText}>Requesting camera permission...</Text>
         </View>
       </View>
     );
   }
 
-  if (hasPermission === false) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Wallet</Text>
-        </View>
-        <View style={styles.centered}>
-          <Text style={styles.permissionIcon}>📷</Text>
-          <Text style={styles.permissionTitle}>Camera Access Required</Text>
-          <Text style={styles.permissionText}>
-            Please grant camera permission to scan tickets
-          </Text>
-          <TouchableOpacity 
-            style={styles.permissionButton}
-            onPress={checkPermissions}
-          >
-            <Text style={styles.permissionButtonText}>Grant Permission</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  if (!scannerActive) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Wallet</Text>
-        </View>
-        <View style={styles.scannerHome}>
-          <View style={styles.scannerIcon}>
-            <Text style={styles.scannerIconText}>📱</Text>
-          </View>
-          <Text style={styles.scannerTitle}>Ticket Scanner</Text>
-          <Text style={styles.scannerDescription}>
-            Scan event tickets to validate entry
-          </Text>
-          <TouchableOpacity
-            style={styles.startScanButton}
-            onPress={() => setScannerActive(true)}
-          >
-            <Text style={styles.startScanButtonText}>Start Scanning</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
+  const topSellingEvents = getTopSellingEvents();
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Wallet</Text>
+        <Text style={styles.headerTitle}>Discover</Text>
       </View>
 
-      <View style={styles.scannerContainer}>
-        <Camera
-          style={styles.camera}
-          type={Camera.Constants.Type.back}
-          barCodeScannerSettings={{
-            barCodeTypes: [BarCodeScanner.Constants.BarCodeType.qr],
-          }}
-          onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        >
-          <View style={styles.overlay}>
-            <View style={styles.topOverlay}>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setScannerActive(false)}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-<View style={styles.middleContainer}>
-  <View style={styles.sideOverlay}></View>
-  <View style={styles.focusBox}>
-    <View style={[styles.corner, styles.topLeft]} />
-    <View style={[styles.corner, styles.topRight]} />
-    <View style={[styles.corner, styles.bottomLeft]} />
-    <View style={[styles.corner, styles.bottomRight]} />
-  </View>
-  <View style={styles.sideOverlay}></View>
-</View>
+      <ScrollView 
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Competition Banner */}
+        <CompetitionBanner />
 
-            
-            <View style={styles.bottomOverlay}>
-              <Text style={styles.instructionText}>
-                {scanned ? 'Processing...' : 'Align QR code within frame'}
-              </Text>
-            </View>
+        {/* Sales Stats Dashboard */}
+        <SalesStatsCard />
+
+        {/* Top Selling Events */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="podium" size={24} color="#FFD700" />
+            <Text style={styles.sectionTitle}>Top 5 Best Sellers</Text>
           </View>
-        </Camera>
+          <Text style={styles.sectionSubtitle}>
+            These events are flying off the shelves!
+          </Text>
+          
+          {topSellingEvents.map((event, index) => (
+            <EventCard key={event.event_id} event={event} rank={index + 1} />
+          ))}
+        </View>
 
-        {loading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.loadingOverlayText}>Validating ticket...</Text>
+        {/* All Events */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>All Events</Text>
+          {events.map((event) => (
+            <EventCard key={event.event_id} event={event} />
+          ))}
+        </View>
+
+        {events.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="calendar-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyText}>No events available</Text>
           </View>
         )}
-
-        {/* Success Modal */}
-        <Modal
-          visible={!!ticketInfo}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={resetScanner}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <View style={styles.successHeader}>
-                <View style={styles.successIcon}>
-                  <Text style={styles.successIconText}>✓</Text>
-                </View>
-                <Text style={styles.successTitle}>Ticket Validated!</Text>
-              </View>
-
-              {ticketInfo && (
-                <View style={styles.ticketDetails}>
-                  <DetailRow label="Ticket Code" value={ticketInfo.ticket_code} />
-                  <DetailRow label="Customer" value={`${ticketInfo.first_name} ${ticketInfo.last_name}`} />
-                  <DetailRow label="Event" value={ticketInfo.event_name} />
-                  <DetailRow 
-                    label="Event Date" 
-                    value={new Date(ticketInfo.event_date).toLocaleString()} 
-                  />
-                  <DetailRow label="Location" value={ticketInfo.location} />
-                  <DetailRow 
-                    label="Validated At" 
-                    value={new Date().toLocaleString()} 
-                  />
-                </View>
-              )}
-
-              <TouchableOpacity 
-                style={styles.continueButton}
-                onPress={resetScanner}
-              >
-                <Text style={styles.continueButtonText}>Continue Scanning</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      </View>
+      </ScrollView>
     </View>
   );
 };
-
-const DetailRow = ({ label, value }) => (
-  <View style={styles.detailRow}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue}>{value}</Text>
-  </View>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -264,289 +267,267 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 20,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
   },
   headerTitle: {
     color: '#fff',
     fontSize: 24,
     fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  content: {
+    flex: 1,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
   },
-  accessDenied: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  lockIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  accessDeniedTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  accessDeniedText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  permissionIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  permissionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 12,
-  },
-  permissionText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 24,
-  },
-  permissionButton: {
+  competitionBanner: {
     backgroundColor: '#000',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 25,
+    margin: 20,
+    marginBottom: 16,
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  permissionButtonText: {
+  competitionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  competitionTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    marginLeft: 12,
   },
-  scannerHome: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  scannerIcon: {
-    width: 120,
-    height: 120,
-    backgroundColor: '#000',
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  scannerIconText: {
-    fontSize: 60,
-  },
-  scannerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 12,
-  },
-  scannerDescription: {
-    fontSize: 16,
-    color: '#666',
+  competitionSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 24,
   },
-  startScanButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 40,
-    paddingVertical: 18,
-    borderRadius: 30,
+  salesStatsContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 4,
   },
-  startScanButtonText: {
-    color: '#fff',
+  statsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 16,
   },
-  scannerContainer: {
-    flex: 1,
-  },
-  camera: {
-    flex: 1,
-  },
-  overlay: {
-    flex: 1,
-  },
-  topOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-start',
-    paddingTop: 20,
-    paddingHorizontal: 20,
-  },
-  closeButton: {
-    alignSelf: 'flex-end',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  middleContainer: {
+  statsGrid: {
     flexDirection: 'row',
-    flex: 2,
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  sideOverlay: {
+  statItem: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    minWidth: '47%',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
   },
-  focusBox: {
-    flex: 3,
+  statIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  section: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+    marginLeft: 8,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+    marginLeft: 32,
+  },
+  eventCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
     position: 'relative',
   },
-  corner: {
+  rankBadge: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderColor: '#fff',
-  },
-  topLeft: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-  },
-  topRight: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-  },
-  bottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-  },
-  bottomRight: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-  },
-  bottomOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFD700',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  instructionText: {
-    color: '#fff',
-    fontSize: 18,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingOverlayText: {
-    color: '#fff',
-    marginTop: 15,
+  rankText: {
     fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
   },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 30,
+  imageContainer: {
+    position: 'relative',
     width: '100%',
-    maxWidth: 400,
+    height: 180,
+    backgroundColor: '#e0e0e0',
   },
-  successHeader: {
-    alignItems: 'center',
-    marginBottom: 30,
+  eventImage: {
+    width: '100%',
+    height: '100%',
   },
-  successIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+  priceTag: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  successIconText: {
-    fontSize: 48,
+  priceText: {
     color: '#fff',
-    fontWeight: 'bold',
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  ticketDetails: {
-    marginBottom: 30,
-  },
-  detailRow: {
-    marginBottom: 16,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  detailValue: {
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  eventInfo: {
+    padding: 16,
+  },
+  eventName: {
+    fontSize: 17,
+    fontWeight: 'bold',
     color: '#000',
+    marginBottom: 10,
+    lineHeight: 22,
+  },
+  eventMeta: {
+    marginBottom: 12,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  metaText: {
+    fontSize: 13,
+    color: '#666',
+    flex: 1,
+    marginLeft: 6,
+  },
+  salesProgress: {
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
+    borderRadius: 3,
+  },
+  salesInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  salesText: {
+    fontSize: 12,
+    color: '#666',
     fontWeight: '600',
   },
-  continueButton: {
-    backgroundColor: '#000',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  continueButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  percentageText: {
+    fontSize: 12,
+    color: '#4CAF50',
     fontWeight: 'bold',
+  },
+  hotSale: {
+    color: '#FF4444',
+  },
+  hotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  hotText: {
+    fontSize: 12,
+    color: '#FF4444',
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#999',
+    marginTop: 16,
   },
 });
 
-export default WalletScreen;
+export default HomeScreen;

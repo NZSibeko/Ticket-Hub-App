@@ -18,9 +18,38 @@ import { Ionicons } from '@expo/vector-icons';
 const { width } = Dimensions.get('window');
 const API_URL = 'http://localhost:3000';
 
+// Image pool for different event types
+const eventImages = {
+  music: [
+    'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400',
+    'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400',
+    'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400',
+    'https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?w=400',
+    'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400'
+  ],
+  sports: [
+    'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400',
+    'https://images.unsplash.com/photo-1519861531473-9200262188bf?w=400',
+    'https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=400',
+    'https://images.unsplash.com/photo-1551958219-acbc608c6377?w=400'
+  ],
+  arts: [
+    'https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=400',
+    'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=400',
+    'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400',
+    'https://images.unsplash.com/photo-1536924940846-227afb31e2a5?w=400'
+  ],
+  general: [
+    'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400',
+    'https://images.unsplash.com/photo-1505236858219-8359eb29e329?w=400',
+    'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400',
+    'https://images.unsplash.com/photo-1511578314322-379afb476865?w=400',
+    'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=400'
+  ]
+};
+
 const HomeScreen = ({ navigation }) => {
   const [allEvents, setAllEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -36,17 +65,29 @@ const HomeScreen = ({ navigation }) => {
     fetchEvents();
   }, []);
 
-  useEffect(() => {
-    applyFilters();
-  }, [searchQuery, filters, allEvents]);
+  const getEventImage = (event, index) => {
+    if (event.image_url) return event.image_url;
+
+    const eventName = event.event_name.toLowerCase();
+    const description = (event.event_description || '').toLowerCase();
+
+    if (eventName.includes('concert') || eventName.includes('music') || description.includes('music')) {
+      return eventImages.music[index % eventImages.music.length];
+    } else if (eventName.includes('sport') || eventName.includes('game') || eventName.includes('match')) {
+      return eventImages.sports[index % eventImages.sports.length];
+    } else if (eventName.includes('art') || eventName.includes('exhibition') || eventName.includes('theatre')) {
+      return eventImages.arts[index % eventImages.arts.length];
+    } else {
+      return eventImages.general[index % eventImages.general.length];
+    }
+  };
 
   const fetchEvents = async () => {
     try {
-      const headers = getAuthHeader();
+      const headers = await getAuthHeader();
       const response = await axios.get(`${API_URL}/zi_events`, { headers });
       const events = response.data.d.results.filter(e => e.event_status === 'VALIDATED');
       setAllEvents(events);
-      setFilteredEvents(events);
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
@@ -54,10 +95,9 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  const applyFilters = () => {
-    let filtered = [...allEvents];
+  const applyFilters = (events) => {
+    let filtered = [...events];
 
-    // Search query filter
     if (searchQuery) {
       filtered = filtered.filter(event =>
         event.event_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -65,7 +105,6 @@ const HomeScreen = ({ navigation }) => {
       );
     }
 
-    // Price range filter
     if (filters.minPrice) {
       filtered = filtered.filter(event => event.price >= parseFloat(filters.minPrice));
     }
@@ -73,14 +112,12 @@ const HomeScreen = ({ navigation }) => {
       filtered = filtered.filter(event => event.price <= parseFloat(filters.maxPrice));
     }
 
-    // Location filter
     if (filters.location) {
       filtered = filtered.filter(event =>
         event.location.toLowerCase().includes(filters.location.toLowerCase())
       );
     }
 
-    // Sorting
     switch (filters.sortBy) {
       case 'date':
         filtered.sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
@@ -93,7 +130,7 @@ const HomeScreen = ({ navigation }) => {
         break;
     }
 
-    setFilteredEvents(filtered);
+    return filtered;
   };
 
   const clearFilters = () => {
@@ -106,14 +143,29 @@ const HomeScreen = ({ navigation }) => {
     setSearchQuery('');
   };
 
-  const EventCard = ({ event, featured = false }) => (
+  const categorizeEvents = () => {
+    const filteredEvents = applyFilters(allEvents);
+    
+    return {
+      featured: filteredEvents.slice(0, 6),
+      music: filteredEvents.filter(e => 
+        e.event_name.toLowerCase().includes('concert') ||
+        e.event_name.toLowerCase().includes('music') ||
+        e.event_name.toLowerCase().includes('festival') ||
+        e.event_description?.toLowerCase().includes('music')
+      ).slice(0, 6),
+      all: filteredEvents
+    };
+  };
+
+  const EventCard = ({ event, index, horizontal = false }) => (
     <TouchableOpacity
-      style={[styles.eventCard, featured && styles.featuredCard]}
+      style={[styles.eventCard, horizontal && styles.horizontalCard]}
       onPress={() => navigation.navigate('PurchaseTicket', { event })}
     >
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: event.image_url || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=400' }}
+          source={{ uri: getEventImage(event, index) }}
           style={styles.eventImage}
           resizeMode="cover"
         />
@@ -131,8 +183,7 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.metaText}>
               {new Date(event.start_date).toLocaleDateString('en-US', {
                 month: 'short',
-                day: 'numeric',
-                year: 'numeric'
+                day: 'numeric'
               })}
             </Text>
           </View>
@@ -170,8 +221,7 @@ const HomeScreen = ({ navigation }) => {
     );
   }
 
-  const featuredEvents = filteredEvents.slice(0, 3);
-  const gridEvents = filteredEvents.slice(3);
+  const categories = categorizeEvents();
 
   return (
     <View style={styles.container}>
@@ -203,40 +253,39 @@ const HomeScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       >
         {/* Featured Events Slider */}
-        {featuredEvents.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Featured Events</Text>
+        {categories.featured.length > 0 && (
+          <View style={styles.categorySection}>
+            <Text style={styles.categoryTitle}>Featured Events</Text>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
-              pagingEnabled
-              snapToInterval={width - 40}
+              contentContainerStyle={styles.horizontalScroll}
+              snapToInterval={width * 0.75 + 16}
               decelerationRate="fast"
-              contentContainerStyle={styles.featuredScroll}
             >
-              {featuredEvents.map((event) => (
-                <EventCard key={event.event_id} event={event} featured />
+              {categories.featured.map((event, index) => (
+                <EventCard key={event.event_id} event={event} index={index} horizontal />
               ))}
             </ScrollView>
           </View>
         )}
 
-        {/* Grid Events */}
-        {gridEvents.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>All Events</Text>
-            <View style={styles.gridContainer}>
-              {gridEvents.map((event) => (
-                <EventCard key={event.event_id} event={event} />
+        {/* All Events Grid */}
+        {categories.all.length > 0 && (
+          <View style={styles.categorySection}>
+            <Text style={styles.categoryTitle}>All Events</Text>
+            <View style={styles.verticalList}>
+              {categories.all.map((event, index) => (
+                <EventCard key={event.event_id} event={event} index={index} />
               ))}
             </View>
           </View>
         )}
 
-        {filteredEvents.length === 0 && (
+        {categories.all.length === 0 && (
           <View style={styles.emptyContainer}>
             <Ionicons name="calendar-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>No events found</Text>
+            <Text style={styles.emptyText}>No events available</Text>
             <TouchableOpacity onPress={clearFilters}>
               <Text style={styles.clearFiltersText}>Clear filters</Text>
             </TouchableOpacity>
@@ -261,7 +310,6 @@ const HomeScreen = ({ navigation }) => {
             </View>
 
             <ScrollView style={styles.modalBody}>
-              {/* Price Range */}
               <Text style={styles.filterSectionTitle}>Price Range (Rands)</Text>
               <View style={styles.row}>
                 <View style={styles.halfInput}>
@@ -286,7 +334,6 @@ const HomeScreen = ({ navigation }) => {
                 </View>
               </View>
 
-              {/* Location */}
               <Text style={styles.filterSectionTitle}>Location</Text>
               <TextInput
                 style={styles.input}
@@ -295,7 +342,6 @@ const HomeScreen = ({ navigation }) => {
                 onChangeText={(text) => setFilters({...filters, location: text})}
               />
 
-              {/* Sort By */}
               <Text style={styles.filterSectionTitle}>Sort By</Text>
               <View style={styles.sortOptions}>
                 {[
@@ -325,16 +371,16 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.clearButton}
-                onPress={clearFilters}
+                onPress={() => {
+                  clearFilters();
+                  setFilterModalVisible(false);
+                }}
               >
                 <Text style={styles.clearButtonText}>Clear All</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.applyButton}
-                onPress={() => {
-                  applyFilters();
-                  setFilterModalVisible(false);
-                }}
+                onPress={() => setFilterModalVisible(false)}
               >
                 <Text style={styles.applyButtonText}>Apply Filters</Text>
               </TouchableOpacity>
@@ -406,21 +452,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  section: {
+  categorySection: {
     marginTop: 24,
-    paddingBottom: 16,
+    marginBottom: 8,
   },
-  sectionTitle: {
+  categoryTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: '#000',
     marginBottom: 16,
     paddingHorizontal: 20,
   },
-  featuredScroll: {
+  horizontalScroll: {
     paddingLeft: 20,
+    paddingRight: 10,
   },
-  gridContainer: {
+  verticalList: {
     paddingHorizontal: 20,
   },
   eventCard: {
@@ -434,14 +481,14 @@ const styles = StyleSheet.create({
     elevation: 4,
     overflow: 'hidden',
   },
-  featuredCard: {
-    width: width - 40,
+  horizontalCard: {
+    width: width * 0.75,
     marginRight: 16,
   },
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: 200,
+    height: 180,
     backgroundColor: '#e0e0e0',
   },
   eventImage: {
@@ -450,47 +497,47 @@ const styles = StyleSheet.create({
   },
   priceTag: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 12,
+    right: 12,
     backgroundColor: 'rgba(0,0,0,0.85)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   priceText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   eventInfo: {
     padding: 16,
   },
   eventName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 12,
-    lineHeight: 24,
+    marginBottom: 10,
+    lineHeight: 22,
   },
   eventMeta: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   metaText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
     flex: 1,
     marginLeft: 6,
   },
   attendeesBar: {
-    height: 4,
+    height: 3,
     backgroundColor: '#e0e0e0',
     borderRadius: 2,
-    marginBottom: 6,
+    marginBottom: 4,
     overflow: 'hidden',
   },
   attendeesProgress: {
@@ -499,12 +546,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   attendeesText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#999',
   },
   emptyContainer: {
     alignItems: 'center',
     paddingTop: 60,
+    paddingBottom: 40,
   },
   emptyText: {
     fontSize: 18,

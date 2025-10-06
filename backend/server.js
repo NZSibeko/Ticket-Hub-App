@@ -36,6 +36,17 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Admin-only middleware - ADD THIS
+const requireAdmin = (req, res, next) => {
+  if (req.user.userType !== 'admin') {
+    return res.status(403).json({ 
+      success: false,
+      error: 'Admin access required' 
+    });
+  }
+  next();
+};
+
 // ============= HELPER FUNCTIONS =============
 
 const generateTicketCode = () => {
@@ -207,6 +218,186 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// ============= ADMIN AUTHENTICATION ROUTES =============
+
+// Admin login - FIXED version
+app.post('/api/admin/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    console.log('🔐 Admin login attempt for:', username);
+
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username and password are required' 
+      });
+    }
+
+    // Find admin by username or email
+    const admin = await dbOperations.get(
+      'SELECT * FROM admins WHERE username = ? OR email = ?',
+      [username, username]
+    );
+
+    if (!admin) {
+      console.log('❌ No admin found with username/email:', username);
+      return res.status(401).json({ 
+        success: false,
+        error: 'Invalid credentials - admin not found' 
+      });
+    }
+
+    console.log('✅ Admin found:', admin.username);
+    console.log('🔑 Verifying password...');
+
+    // Verify password
+    const validPassword = await bcrypt.compare(password, admin.password_hash);
+
+    if (!validPassword) {
+      console.log('❌ Password incorrect for admin:', admin.username);
+      return res.status(401).json({ 
+        success: false,
+        error: 'Invalid credentials - wrong password' 
+      });
+    }
+
+    console.log('✅ Password verified for admin:', admin.username);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        adminId: admin.admin_id,
+        username: admin.username,
+        email: admin.email,
+        role: admin.role,
+        userType: 'admin'
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    console.log('🎉 Admin login successful for:', admin.username);
+
+    res.json({
+      success: true,
+      token,
+      admin: {
+        admin_id: admin.admin_id,
+        username: admin.username,
+        email: admin.email,
+        role: admin.role,
+        created_at: admin.created_at
+      }
+    });
+  } catch (error) {
+    console.error('💥 Admin login error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Login failed. Please try again.' 
+    });
+  }
+});
+
+// Admin registration (for creating additional admin users)
+app.post('/api/admin/auth/register', async (req, res) => {
+  try {
+    const { username, email, password, role = 'ADMIN' } = req.body;
+
+    // Validate input
+    if (!username || !email || !password) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'All required fields must be provided' 
+      });
+    }
+
+    // Check if username or email already exists
+    const existingAdmin = await dbOperations.get(
+      'SELECT * FROM admins WHERE username = ? OR email = ?',
+      [username, email]
+    );
+
+    if (existingAdmin) {
+      return res.status(409).json({ 
+        success: false,
+        error: 'Username or email already exists' 
+      });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create admin
+    const adminId = uuidv4();
+    await dbOperations.run(
+      `INSERT INTO admins (admin_id, username, email, password_hash, role)
+       VALUES (?, ?, ?, ?, ?)`,
+      [adminId, username, email, passwordHash, role]
+    );
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        adminId,
+        username,
+        email,
+        role,
+        userType: 'admin'
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Admin registration successful',
+      token,
+      admin: {
+        admin_id: adminId,
+        username,
+        email,
+        role,
+        created_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Admin registration error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Registration failed. Please try again.' 
+    });
+  }
+});
+
+// Get admin profile
+app.get('/api/admin/profile', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.userType !== 'admin') {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Admin access required' 
+      });
+    }
+
+    const admin = await dbOperations.get(
+      'SELECT admin_id, username, email, role, created_at FROM admins WHERE admin_id = ?',
+      [req.user.adminId]
+    );
+
+    if (!admin) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Admin not found' 
+      });
+    }
+
+    res.json({ success: true, admin });
+  } catch (error) {
+    console.error('Error fetching admin profile:', error);
+    res.status(500).json({ error: 'Failed to fetch admin profile' });
+  }
+});
+
 // ============= EVENT ROUTES =============
 
 // Get all validated events
@@ -334,7 +525,7 @@ app.post('/api/admin/events', authenticateToken, async (req, res) => {
       location,
       max_attendees,
       price,
-      currency = 'USD',
+      currency = 'ZAR',
       event_image
     } = req.body;
 
@@ -457,6 +648,27 @@ app.delete('/api/admin/events/:id', authenticateToken, async (req, res) => {
       error: 'Failed to delete event' 
     });
   }
+});
+
+// All admin routes should now use both middlewares:
+app.get('/api/admin/dashboard/stats', authenticateToken, requireAdmin, async (req, res) => {
+  // ... existing code
+});
+
+app.get('/api/admin/tickets', authenticateToken, requireAdmin, async (req, res) => {
+  // ... existing code
+});
+
+app.post('/api/admin/events', authenticateToken, requireAdmin, async (req, res) => {
+  // ... existing code
+});
+
+app.put('/api/admin/events/:id', authenticateToken, requireAdmin, async (req, res) => {
+  // ... existing code
+});
+
+app.delete('/api/admin/events/:id', authenticateToken, requireAdmin, async (req, res) => {
+  // ... existing code
 });
 
 // ============= TICKET ROUTES =============
@@ -685,7 +897,7 @@ app.post('/api/tickets/:code/validate', authenticateToken, async (req, res) => {
 // ============= ADMIN DASHBOARD ROUTES =============
 
 // Get dashboard statistics
-app.get('/api/admin/dashboard/stats', authenticateToken, async (req, res) => {
+app.get('/api/admin/dashboard/stats', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const stats = await Promise.all([
       dbOperations.get('SELECT COUNT(*) as count FROM events'),
@@ -709,7 +921,7 @@ app.get('/api/admin/dashboard/stats', authenticateToken, async (req, res) => {
 });
 
 // Get all tickets (admin)
-app.get('/api/admin/tickets', authenticateToken, async (req, res) => {
+app.get('/api/admin/tickets', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const tickets = await dbOperations.all(
       `SELECT t.*, e.event_name, c.first_name, c.last_name, c.email
@@ -724,6 +936,162 @@ app.get('/api/admin/tickets', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching tickets:', error);
     res.status(500).json({ error: 'Failed to fetch tickets' });
+  }
+});
+
+// Get all events for admin management
+app.get('/api/admin/events', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const events = await dbOperations.all(
+      `SELECT e.*, c.first_name, c.last_name, c.email as creator_email
+       FROM events e
+       LEFT JOIN customers c ON e.created_by = c.customer_id
+       ORDER BY e.created_at DESC`
+    );
+
+    res.json({ success: true, events });
+  } catch (error) {
+    console.error('Error fetching admin events:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch events' 
+    });
+  }
+});
+
+// Create event (admin)
+app.post('/api/admin/events', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const {
+      event_name,
+      event_description,
+      start_date,
+      end_date,
+      location,
+      max_attendees,
+      price,
+      currency = 'USD',
+      event_image
+    } = req.body;
+
+    // Validation
+    if (!event_name || !start_date || !end_date || !location || !max_attendees || price === undefined) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'All required fields must be provided' 
+      });
+    }
+
+    const eventId = uuidv4();
+    await dbOperations.run(
+      `INSERT INTO events (
+        event_id, event_name, event_description, start_date, end_date, 
+        location, max_attendees, current_attendees, price, currency, 
+        event_image, created_by, event_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'VALIDATED')`,
+      [
+        eventId, event_name, event_description || '', start_date, end_date, 
+        location, parseInt(max_attendees), parseFloat(price), currency, 
+        event_image || null, req.user.adminId || req.user.customerId
+      ]
+    );
+
+    const event = await dbOperations.get(
+      'SELECT * FROM events WHERE event_id = ?',
+      [eventId]
+    );
+
+    res.status(201).json({ success: true, event });
+  } catch (error) {
+    console.error('Error creating event:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to create event' 
+    });
+  }
+});
+
+// Update event (admin)
+app.put('/api/admin/events/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { 
+      event_name, 
+      event_description, 
+      start_date, 
+      end_date, 
+      location, 
+      max_attendees, 
+      price, 
+      event_status,
+      event_image
+    } = req.body;
+
+    await dbOperations.run(
+      `UPDATE events SET 
+       event_name = ?, 
+       event_description = ?, 
+       start_date = ?, 
+       end_date = ?,
+       location = ?, 
+       max_attendees = ?, 
+       price = ?, 
+       event_status = ?,
+       event_image = ?,
+       updated_at = CURRENT_TIMESTAMP
+       WHERE event_id = ?`,
+      [
+        event_name, event_description, start_date, end_date, 
+        location, max_attendees, price, event_status, event_image,
+        req.params.id
+      ]
+    );
+
+    const event = await dbOperations.get(
+      'SELECT * FROM events WHERE event_id = ?', 
+      [req.params.id]
+    );
+
+    res.json({ success: true, event });
+  } catch (error) {
+    console.error('Error updating event:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to update event' 
+    });
+  }
+});
+
+// Delete event (admin)
+app.delete('/api/admin/events/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Check if event has tickets
+    const tickets = await dbOperations.get(
+      'SELECT COUNT(*) as count FROM tickets WHERE event_id = ?',
+      [req.params.id]
+    );
+
+    if (tickets.count > 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Cannot delete event with existing tickets' 
+      });
+    }
+
+    await dbOperations.run(
+      'DELETE FROM events WHERE event_id = ?', 
+      [req.params.id]
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Event deleted successfully' 
+    });
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to delete event' 
+    });
   }
 });
 
@@ -776,6 +1144,97 @@ app.put('/api/profile', authenticateToken, async (req, res) => {
   }
 });
 
+// ============= DEBUG ROUTES =============
+
+// Check if admin users exist
+app.get('/api/debug/admins', async (req, res) => {
+  try {
+    const admins = await dbOperations.all('SELECT admin_id, username, email, role FROM admins');
+    console.log('📋 Admins in database:', admins);
+    res.json({ success: true, admins });
+  } catch (error) {
+    console.error('Error fetching admins:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch admins' });
+  }
+});
+
+// Check if customers exist
+app.get('/api/debug/customers', async (req, res) => {
+  try {
+    const customers = await dbOperations.all('SELECT customer_id, first_name, last_name, email FROM customers');
+    console.log('📋 Customers in database:', customers);
+    res.json({ success: true, customers });
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch customers' });
+  }
+});
+
+// Check database tables
+app.get('/api/debug/tables', async (req, res) => {
+  try {
+    const tables = await dbOperations.all(
+      "SELECT name FROM sqlite_master WHERE type='table'"
+    );
+    console.log('📋 Database tables:', tables);
+    res.json({ success: true, tables });
+  } catch (error) {
+    console.error('Database check error:', error);
+    res.status(500).json({ success: false, error: 'Database connection failed' });
+  }
+});
+
+// Create admin user via API (temporary)
+app.post('/api/debug/create-admin', async (req, res) => {
+  try {
+    const { username = 'admin', password = 'admin123', email = 'admin@tickethub.com' } = req.body;
+    
+    // Check if admin already exists
+    const existingAdmin = await dbOperations.get(
+      'SELECT * FROM admins WHERE username = ? OR email = ?',
+      [username, email]
+    );
+
+    if (existingAdmin) {
+      return res.json({ 
+        success: true, 
+        message: 'Admin already exists',
+        admin: existingAdmin 
+      });
+    }
+
+    const adminId = uuidv4();
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    await dbOperations.run(
+      `INSERT INTO admins (admin_id, username, email, password_hash, role)
+       VALUES (?, ?, ?, ?, ?)`,
+      [adminId, username, email, passwordHash, 'SUPER_ADMIN']
+    );
+
+    const newAdmin = await dbOperations.get(
+      'SELECT * FROM admins WHERE admin_id = ?',
+      [adminId]
+    );
+
+    console.log('✅ Created admin:', newAdmin);
+
+    res.json({ 
+      success: true, 
+      message: 'Admin created successfully',
+      admin: {
+        admin_id: newAdmin.admin_id,
+        username: newAdmin.username,
+        email: newAdmin.email,
+        role: newAdmin.role
+      }
+    });
+  } catch (error) {
+    console.error('Error creating admin:', error);
+    res.status(500).json({ success: false, error: 'Failed to create admin' });
+  }
+});
+
 // ============= HEALTH CHECK =============
 
 app.get('/health', (req, res) => {
@@ -804,4 +1263,15 @@ app.listen(PORT, () => {
   console.log(`📡 Server running on: http://localhost:${PORT}`);
   console.log(`❤️  Health check: http://localhost:${PORT}/health`);
   console.log(`📱 Ready to accept connections from mobile app\n`);
+});
+
+// Debug endpoint to check admin users
+app.get('/api/debug/admins', async (req, res) => {
+  try {
+    const admins = await dbOperations.all('SELECT admin_id, username, email, role FROM admins');
+    res.json({ success: true, admins });
+  } catch (error) {
+    console.error('Error fetching admins:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch admins' });
+  }
 });
