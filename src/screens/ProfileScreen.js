@@ -39,7 +39,7 @@ const ProfileScreen = ({ navigation }) => {
   }, [user]);
 
   const isAdmin = () => {
-    return user && (user.role === 'admin' || user.role === 'SUPER_ADMIN' || user.role === 'EVENT_MANAGER');
+    return user && (user.role === 'admin' || user.role === 'SUPER_ADMIN' || user.role === 'EVENT_MANAGER' || user.role === 'SUPPORT' || user.role === 'SUPERHERO');
   };
 
   const isCustomer = () => {
@@ -156,6 +156,10 @@ const ProfileScreen = ({ navigation }) => {
         return 'Super Administrator';
       case 'EVENT_MANAGER':
         return 'Event Manager';
+      case 'SUPPORT':
+        return 'Support Team';
+      case 'SUPERHERO':
+        return 'Superhero';
       case 'admin':
       default:
         return 'Administrator';
@@ -328,8 +332,8 @@ const ProfileScreen = ({ navigation }) => {
               <ProfileOption
                 icon="people"
                 title="User Management"
-                subtitle="Manage customers and admins"
-                onPress={() => Alert.alert('Coming Soon', 'User management coming soon')}
+                subtitle="Manage customers and staff roles"
+                onPress={() => navigation.navigate('UserManagement')}
                 color="#9C27B0"
               />
             </View>

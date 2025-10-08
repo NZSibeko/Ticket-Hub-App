@@ -5,283 +5,395 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
-  TextInput,
-  Image
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
 const API_URL = 'http://localhost:3000';
 
 const TicketPurchaseScreen = ({ route, navigation }) => {
-  const { event } = route.params;
+  const params = route?.params || {};
+  const { event, ticketType } = params;
   const { user, getAuthHeader } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [paymentStep, setPaymentStep] = useState(1); // 1: Review, 2: Payment
-  const [cardDetails, setCardDetails] = useState({
-    cardNumber: '',
-    expiry: '',
-    cvc: '',
-    name: ''
-  });
+  const [quantity, setQuantity] = useState(1);
+  const [error, setError] = useState(null);
+  const [scaleAnim] = useState(new Animated.Value(1));
 
-  const formatCardNumber = (text) => {
-    const cleaned = text.replace(/\s/g, '');
-    const formatted = cleaned.match(/.{1,4}/g)?.join(' ') || cleaned;
-    return formatted.substr(0, 19);
-  };
-
-  const formatExpiry = (text) => {
-    const cleaned = text.replace(/\//g, '');
-    if (cleaned.length >= 2) {
-      return cleaned.substr(0, 2) + '/' + cleaned.substr(2, 2);
+  useEffect(() => {
+    console.log('📋 Route params:', { event, ticketType });
+    if (!event || !ticketType) {
+      setError('Missing event or ticket information. Please go back and try again.');
+      console.error('Missing parameters:', { event, ticketType });
     }
-    return cleaned;
+  }, [event, ticketType]);
+
+  const animateButton = () => {
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const handlePurchase = async () => {
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in to purchase tickets');
-      navigation.navigate('Login');
-      return;
-    }
-
-    if (!cardDetails.cardNumber || !cardDetails.expiry || !cardDetails.cvc || !cardDetails.name) {
-      Alert.alert('Error', 'Please fill in all card details');
-      return;
-    }
-
-    setLoading(true);
     try {
+      setLoading(true);
+
+      if (!event || !ticketType || !user) {
+        throw new Error('Missing required information for purchase.');
+      }
+
+      console.log('🛒 Starting purchase process:', {
+        eventId: event.event_id,
+        ticketTypeId: ticketType.ticket_type_id,
+        quantity,
+        price: ticketType.price,
+        customerId: user.customer_id
+      });
+
       const headers = getAuthHeader();
 
-      // Create payment intent
-      const paymentIntentResponse = await axios.post(
+      const paymentResponse = await axios.post(
         `${API_URL}/api/payments/create-payment-intent`,
         {
-          amount: event.price,
+          amount: ticketType.price * quantity,
           currency: event.currency || 'ZAR',
-          eventId: event.event_id,
-          customerId: user.customer_id
-        },
-        { headers }
-      );
-
-      const { clientSecret, paymentIntentId } = paymentIntentResponse.data;
-
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Confirm payment and create ticket
-      const confirmResponse = await axios.post(
-        `${API_URL}/api/payments/confirm-payment`,
-        {
-          paymentIntentId,
           eventId: event.event_id,
           customerId: user.customer_id,
-          price: event.price,
-          currency: event.currency || 'ZAR',
-          cardDetails: {
-            last4: cardDetails.cardNumber.slice(-4),
-            brand: 'visa' // You can detect card brand
-          }
+          ticketTypeId: ticketType.ticket_type_id,
+          quantity: quantity,
         },
         { headers }
       );
 
-      if (confirmResponse.data.success) {
-        Alert.alert(
-          'Success!',
-          'Your ticket has been purchased successfully.',
-          [
-            {
-              text: 'View Ticket',
-              onPress: () => navigation.navigate('MyTickets')
-            }
-          ]
+      if (paymentResponse.data.success || paymentResponse.data.paymentIntentId) {
+        const confirmResponse = await axios.post(
+          `${API_URL}/api/payments/confirm-payment`,
+          {
+            paymentIntentId: paymentResponse.data.paymentIntentId,
+            eventId: event.event_id,
+            customerId: user.customer_id,
+            ticketTypeId: ticketType.ticket_type_id,
+            quantity: quantity,
+            price: ticketType.price,
+            totalAmount: ticketType.price * quantity,
+            currency: event.currency || 'ZAR',
+          },
+          { headers }
         );
+
+        if (confirmResponse.data.success) {
+          Alert.alert(
+            'Success! 🎉',
+            `You've successfully purchased ${quantity} ${getTicketTypeLabel(ticketType.type)} ticket${quantity > 1 ? 's' : ''}`,
+            [
+              {
+                text: 'View My Tickets',
+                onPress: () => navigation.navigate('MyTickets'),
+              },
+              {
+                text: 'Browse More Events',
+                onPress: () => navigation.navigate('HomeTab'),
+                style: 'cancel',
+              },
+            ]
+          );
+        } else {
+          throw new Error(confirmResponse.data.error || 'Payment confirmation failed');
+        }
+      } else {
+        throw new Error(paymentResponse.data.error || 'Failed to create payment');
       }
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('Purchase error:', error);
       Alert.alert(
-        'Payment Failed',
-        error.response?.data?.error || 'Please try again'
+        'Purchase Failed',
+        error.message || 'Something went wrong. Please try again.',
+        [{ text: 'OK' }]
       );
     } finally {
       setLoading(false);
     }
   };
 
-  if (paymentStep === 1) {
+  const increaseQuantity = () => {
+    if (quantity < (ticketType?.available_quantity || 1)) {
+      setQuantity(quantity + 1);
+      animateButton();
+    }
+  };
+
+  const decreaseQuantity = () => {
+    if (quantity > 1) {
+      setQuantity(quantity - 1);
+      animateButton();
+    }
+  };
+
+  const formatCurrency = (amount, currency = 'ZAR') => {
+    if (!amount) return 'R 0.00';
+    return new Intl.NumberFormat('en-ZA', {
+      style: 'currency',
+      currency: currency,
+    }).format(amount);
+  };
+
+  const getTicketTypeLabel = (type) => {
+    const labels = {
+      early_bird: 'Early Bird',
+      general: 'General',
+      family_group: 'Family/Group',
+      vip: 'VIP',
+      vvip: 'VVIP',
+    };
+    return labels[type] || type.replace(/_/g, ' ').toUpperCase();
+  };
+
+  const getTicketTypeIcon = (type) => {
+    const icons = {
+      early_bird: 'alarm-outline',
+      general: 'person-outline',
+      family_group: 'people-outline',
+      vip: 'star-outline',
+      vvip: 'diamond-outline',
+    };
+    return icons[type] || 'ticket-outline';
+  };
+
+  const unitPrice = ticketType?.price || 0;
+  const totalAmount = unitPrice * quantity;
+  const availableQuantity = ticketType?.available_quantity || 0;
+
+  if (error) {
     return (
-      <ScrollView style={styles.container}>
-        <View style={styles.content}>
-          {/* Event Preview */}
-          <View style={styles.eventPreview}>
-            <Image
-              source={{ uri: event.image_url || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=400' }}
-              style={styles.eventImage}
-              resizeMode="cover"
-            />
-            <View style={styles.eventInfo}>
-              <Text style={styles.eventName}>{event.event_name}</Text>
-              <Text style={styles.eventDate}>
-                {new Date(event.start_date).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
-              </Text>
-              <Text style={styles.eventLocation}>{event.location}</Text>
-            </View>
-          </View>
+      <View style={styles.centered}>
+        <Ionicons name="alert-circle-outline" size={64} color="#FF6B6B" />
+        <Text style={styles.errorTitle}>Oops!</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={20} color="#fff" style={styles.buttonIcon} />
+          <Text style={styles.retryButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
-          {/* Order Summary */}
-          <View style={styles.summaryCard}>
-            <Text style={styles.sectionTitle}>Order Summary</Text>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Ticket Price</Text>
-              <Text style={styles.summaryValue}>R{event.price.toFixed(2)}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Service Fee</Text>
-              <Text style={styles.summaryValue}>R15.00</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>
-                R{(event.price + 15).toFixed(2)} {event.currency || 'ZAR'}
-              </Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.continueButton}
-            onPress={() => setPaymentStep(2)}
-          >
-            <Text style={styles.continueButtonText}>Continue to Payment</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+  if (!event || !ticketType) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#000" />
+        <Text style={styles.loadingText}>Loading purchase details...</Text>
+      </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        {/* Payment Form */}
-        <View style={styles.paymentCard}>
-          <Text style={styles.sectionTitle}>Payment Details</Text>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Purchase Tickets</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Cardholder Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="John Doe"
-              value={cardDetails.name}
-              onChangeText={(text) => setCardDetails({...cardDetails, name: text})}
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Card Number</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="1234 5678 9012 3456"
-              value={cardDetails.cardNumber}
-              onChangeText={(text) => 
-                setCardDetails({...cardDetails, cardNumber: formatCardNumber(text)})
-              }
-              keyboardType="numeric"
-              maxLength={19}
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.halfInput}>
-              <Text style={styles.label}>Expiry Date</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="MM/YY"
-                value={cardDetails.expiry}
-                onChangeText={(text) => 
-                  setCardDetails({...cardDetails, expiry: formatExpiry(text)})
-                }
-                keyboardType="numeric"
-                maxLength={5}
-                editable={!loading}
-              />
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Event Info Card */}
+        <View style={styles.eventCard}>
+          <View style={styles.eventHeader}>
+            <View style={styles.ticketIconWrapper}>
+              <Ionicons name={getTicketTypeIcon(ticketType.type)} size={32} color="#000" />
             </View>
-            <View style={styles.halfInput}>
-              <Text style={styles.label}>CVC</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="123"
-                value={cardDetails.cvc}
-                onChangeText={(text) => 
-                  setCardDetails({...cardDetails, cvc: text.replace(/[^0-9]/g, '')})
-                }
-                keyboardType="numeric"
-                maxLength={4}
-                secureTextEntry
-                editable={!loading}
-              />
+            <View style={styles.eventHeaderText}>
+              <Text style={styles.eventName} numberOfLines={2}>{event.event_name}</Text>
+              <Text style={styles.ticketTypeBadge}>
+                {getTicketTypeLabel(ticketType.type)} Ticket
+              </Text>
             </View>
           </View>
 
-          <View style={styles.securityNote}>
-            <Text style={styles.securityIcon}>🔒</Text>
-            <Text style={styles.securityText}>
-              Your payment is secure and encrypted
+          <View style={styles.eventDetails}>
+            <View style={styles.eventDetailRow}>
+              <Ionicons name="calendar-outline" size={18} color="#666" />
+              <Text style={styles.eventDetailText}>
+                {new Date(event.start_date).toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </Text>
+            </View>
+            <View style={styles.eventDetailRow}>
+              <Ionicons name="location-outline" size={18} color="#666" />
+              <Text style={styles.eventDetailText} numberOfLines={1}>
+                {event.location}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Quantity Selector */}
+        <View style={styles.quantityCard}>
+          <Text style={styles.sectionTitle}>Select Quantity</Text>
+          <Text style={styles.sectionSubtitle}>
+            {availableQuantity} tickets available
+          </Text>
+
+          <Animated.View 
+            style={[
+              styles.quantitySelector,
+              { transform: [{ scale: scaleAnim }] }
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                quantity <= 1 && styles.quantityButtonDisabled
+              ]}
+              onPress={decreaseQuantity}
+              disabled={quantity <= 1}
+            >
+              <Ionicons 
+                name="remove" 
+                size={24} 
+                color={quantity <= 1 ? '#ccc' : '#fff'} 
+              />
+            </TouchableOpacity>
+            
+            <View style={styles.quantityDisplay}>
+              <Text style={styles.quantityNumber}>{quantity}</Text>
+              <Text style={styles.quantityLabel}>
+                {quantity === 1 ? 'Ticket' : 'Tickets'}
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                styles.quantityButton,
+                quantity >= availableQuantity && styles.quantityButtonDisabled
+              ]}
+              onPress={increaseQuantity}
+              disabled={quantity >= availableQuantity}
+            >
+              <Ionicons 
+                name="add" 
+                size={24} 
+                color={quantity >= availableQuantity ? '#ccc' : '#fff'} 
+              />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+
+        {/* Pricing Breakdown */}
+        <View style={styles.pricingCard}>
+          <Text style={styles.sectionTitle}>Order Summary</Text>
+          
+          <View style={styles.pricingRow}>
+            <Text style={styles.pricingLabel}>Ticket Price</Text>
+            <Text style={styles.pricingValue}>
+              {formatCurrency(unitPrice, event.currency)}
+            </Text>
+          </View>
+
+          <View style={styles.pricingRow}>
+            <Text style={styles.pricingLabel}>Quantity</Text>
+            <Text style={styles.pricingValue}>× {quantity}</Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total Amount</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrency(totalAmount, event.currency)}
             </Text>
           </View>
         </View>
 
-        {/* Total */}
-        <View style={styles.totalCard}>
-          <Text style={styles.totalCardLabel}>Total Amount</Text>
-          <Text style={styles.totalCardValue}>
-            R{(event.price + 2).toFixed(2)}
+        {/* Test Mode Banner */}
+        <View style={styles.testModeBanner}>
+          <Ionicons name="flask-outline" size={20} color="#856404" />
+          <Text style={styles.testModeText}>
+            Test Mode - No real payment required
           </Text>
         </View>
 
-        {/* Pay Button */}
+        {/* Payment Info */}
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
+            <Text style={styles.infoText}>Secure payment processing</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="mail" size={20} color="#2196F3" />
+            <Text style={styles.infoText}>Instant email confirmation</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="qr-code" size={20} color="#FF9800" />
+            <Text style={styles.infoText}>Digital QR code ticket</Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Fixed Bottom Button */}
+      <View style={styles.bottomContainer}>
         <TouchableOpacity
-          style={[styles.payButton, loading && styles.disabledButton]}
+          style={[
+            styles.purchaseButton,
+            (loading || availableQuantity <= 0) && styles.purchaseButtonDisabled,
+          ]}
           onPress={handlePurchase}
-          disabled={loading}
+          disabled={loading || availableQuantity <= 0}
         >
           {loading ? (
-            <>
-              <ActivityIndicator color="#fff" />
-              <Text style={styles.payButtonTextLoading}>Processing...</Text>
-            </>
+            <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={styles.payButtonText}>
-              Complete Purchase
-            </Text>
+            <>
+              <View style={styles.purchaseButtonContent}>
+                <View>
+                  <Text style={styles.purchaseButtonLabel}>Pay Now</Text>
+                  <Text style={styles.purchaseButtonPrice}>
+                    {formatCurrency(totalAmount, event.currency)}
+                  </Text>
+                </View>
+                <View style={styles.purchaseButtonIcon}>
+                  <Ionicons name="arrow-forward" size={24} color="#fff" />
+                </View>
+              </View>
+            </>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setPaymentStep(1)}
+          style={styles.cancelButton}
+          onPress={() => navigation.goBack()}
           disabled={loading}
         >
-          <Text style={styles.backButtonText}>Back</Text>
+          <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
-
-        <Text style={styles.disclaimer}>
-          By completing this purchase, you agree to our Terms of Service and Privacy Policy
-        </Text>
       </View>
-    </ScrollView>
+    </View>
   );
 };
 
@@ -290,90 +402,237 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  content: {
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
-    paddingBottom: 40,
+    backgroundColor: '#f8f9fa',
   },
-  eventPreview: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
   },
-  eventImage: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#e0e0e0',
-  },
-  eventInfo: {
-    padding: 20,
-  },
-  eventName: {
-    fontSize: 22,
+  errorTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#333',
+    marginTop: 16,
     marginBottom: 8,
   },
-  eventDate: {
-    fontSize: 16,
+  errorText: {
+    fontSize: 15,
     color: '#666',
-    marginBottom: 4,
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 40,
+    lineHeight: 22,
   },
-  eventLocation: {
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#000',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  buttonIcon: {
+    marginRight: 4,
+  },
+  retryButtonText: {
+    color: '#fff',
     fontSize: 16,
-    color: '#666',
+    fontWeight: 'bold',
   },
-  summaryCard: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#fff',
+    paddingTop: 50,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 20,
+    paddingBottom: 180,
+  },
+  eventCard: {
+    backgroundColor: '#fff',
     borderRadius: 16,
-    marginBottom: 20,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 3,
   },
-  paymentCard: {
+  eventHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  ticketIconWrapper: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  eventHeaderText: {
+    flex: 1,
+  },
+  eventName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 6,
+    lineHeight: 24,
+  },
+  ticketTypeBadge: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  eventDetails: {
+    gap: 8,
+  },
+  eventDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  eventDetailText: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  quantityCard: {
     backgroundColor: '#fff',
-    padding: 20,
     borderRadius: 16,
-    marginBottom: 20,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 3,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 20,
     color: '#000',
+    marginBottom: 4,
   },
-  summaryRow: {
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+  },
+  quantitySelector: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
   },
-  summaryLabel: {
-    fontSize: 16,
+  quantityButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  quantityButtonDisabled: {
+    backgroundColor: '#f0f0f0',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  quantityDisplay: {
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  quantityNumber: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 4,
+  },
+  quantityLabel: {
+    fontSize: 14,
     color: '#666',
   },
-  summaryValue: {
-    fontSize: 16,
-    color: '#000',
+  pricingCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  pricingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pricingLabel: {
+    fontSize: 15,
+    color: '#666',
+  },
+  pricingValue: {
+    fontSize: 15,
+    color: '#333',
     fontWeight: '600',
   },
   divider: {
     height: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#f0f0f0',
     marginVertical: 16,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   totalLabel: {
     fontSize: 18,
@@ -381,121 +640,115 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   totalValue: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
   },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#000',
-  },
-  input: {
-    height: 50,
-    borderColor: '#ddd',
-    borderWidth: 1,
-    paddingHorizontal: 15,
-    borderRadius: 12,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
-  },
-  row: {
+  testModeBanner: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3CD',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#FFE69C',
+  },
+  testModeText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#856404',
+    fontWeight: '600',
+  },
+  infoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  halfInput: {
+  infoText: {
+    fontSize: 14,
+    color: '#666',
     flex: 1,
   },
-  securityNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 8,
-  },
-  securityIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  securityText: {
-    fontSize: 13,
-    color: '#2E7D32',
-    flex: 1,
-  },
-  totalCard: {
-    backgroundColor: '#000',
+  bottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
     padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
+    paddingBottom: 30,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  purchaseButton: {
+    backgroundColor: '#000',
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  purchaseButtonDisabled: {
+    backgroundColor: '#ccc',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  purchaseButtonContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  totalCardLabel: {
+  purchaseButtonLabel: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  totalCardValue: {
-    fontSize: 32,
+  purchaseButtonPrice: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
   },
-  continueButton: {
-    backgroundColor: '#000',
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  continueButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  payButton: {
-    backgroundColor: '#000',
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    flexDirection: 'row',
+  purchaseButtonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  disabledButton: {
-    backgroundColor: '#999',
-  },
-  payButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  payButtonTextLoading: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 12,
-  },
-  backButton: {
+  cancelButton: {
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#000',
-    marginBottom: 20,
+    borderColor: '#f0f0f0',
+    backgroundColor: '#fff',
   },
-  backButtonText: {
-    color: '#000',
+  cancelButtonText: {
+    color: '#666',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  disclaimer: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
-    lineHeight: 18,
+    fontWeight: '600',
   },
 });
 

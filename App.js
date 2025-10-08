@@ -22,6 +22,7 @@ import CreateEventScreen from './src/screens/CreateEventScreen';
 import EventManagementScreen from './src/screens/EventManagementScreen';
 import SearchEventsScreen from './src/screens/SearchEventsScreen';
 import TicketPurchaseScreen from './src/screens/TicketPurchaseScreen';
+import UserManagementScreen from './src/screens/UserManagementScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -192,7 +193,7 @@ export default function App() {
 
           {/* Ticket Purchase Flow */}
           <Stack.Screen 
-            name="PurchaseTicket" 
+            name="TicketPurchaseScreen" 
             component={TicketPurchaseScreen}
             options={{ title: 'Purchase Ticket' }}
           />
@@ -234,6 +235,11 @@ export default function App() {
             name="EventManagement" 
             component={EventManagementScreen}
             options={{ title: 'Manage Events' }}
+          />
+          <Stack.Screen 
+            name="UserManagement" 
+            component={UserManagementScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       </NavigationContainer>

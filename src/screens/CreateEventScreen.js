@@ -7,12 +7,22 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Switch
 } from 'react-native';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const API_URL = 'http://localhost:3000';
+
+const TICKET_TYPES = [
+  { id: 'early_bird', label: 'Early Bird', icon: 'alarm-outline' },
+  { id: 'general', label: 'General', icon: 'person-outline' },
+  { id: 'family_group', label: 'Family/Group', icon: 'people-outline' },
+  { id: 'vip', label: 'VIP', icon: 'star-outline' },
+  { id: 'vvip', label: 'VVIP', icon: 'diamond-outline' }
+];
 
 const CreateEventScreen = ({ navigation }) => {
   const [form, setForm] = useState({
@@ -22,14 +32,44 @@ const CreateEventScreen = ({ navigation }) => {
     end_date: '',
     location: '',
     max_attendees: '',
-    price: '',
-    currency: 'USD'
+    currency: 'ZAR'
   });
+  
+  const [ticketTypes, setTicketTypes] = useState({
+    early_bird: { enabled: false, price: '', quantity: '' },
+    general: { enabled: true, price: '', quantity: '' },
+    family_group: { enabled: false, price: '', quantity: '' },
+    vip: { enabled: false, price: '', quantity: '' },
+    vvip: { enabled: false, price: '', quantity: '' }
+  });
+  
   const [loading, setLoading] = useState(false);
   const { getAuthHeader } = useAuth();
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleTicketTypeChange = (type, field, value) => {
+    setTicketTypes(prev => ({
+      ...prev,
+      [type]: {
+        ...prev[type],
+        [field]: value
+      }
+    }));
+  };
+
+  const toggleTicketType = (type) => {
+    setTicketTypes(prev => ({
+      ...prev,
+      [type]: {
+        ...prev[type],
+        enabled: !prev[type].enabled,
+        price: !prev[type].enabled ? prev[type].price || '' : '',
+        quantity: !prev[type].enabled ? prev[type].quantity || '' : ''
+      }
+    }));
   };
 
   const validateForm = () => {
@@ -45,14 +85,28 @@ const CreateEventScreen = ({ navigation }) => {
       Alert.alert('Error', 'Location is required');
       return false;
     }
-    if (!form.max_attendees || isNaN(form.max_attendees)) {
-      Alert.alert('Error', 'Valid max attendees number is required');
+
+    // Check if at least one ticket type is enabled
+    const enabledTypes = Object.values(ticketTypes).filter(type => type.enabled);
+    if (enabledTypes.length === 0) {
+      Alert.alert('Error', 'At least one ticket type must be enabled');
       return false;
     }
-    if (!form.price || isNaN(form.price)) {
-      Alert.alert('Error', 'Valid price is required');
-      return false;
+
+    // Validate enabled ticket types
+    for (const [type, config] of Object.entries(ticketTypes)) {
+      if (config.enabled) {
+        if (!config.price || isNaN(config.price) || parseFloat(config.price) < 0) {
+          Alert.alert('Error', `Valid price is required for ${TICKET_TYPES.find(t => t.id === type)?.label}`);
+          return false;
+        }
+        if (!config.quantity || isNaN(config.quantity) || parseInt(config.quantity) <= 0) {
+          Alert.alert('Error', `Valid quantity is required for ${TICKET_TYPES.find(t => t.id === type)?.label}`);
+          return false;
+        }
+      }
     }
+
     return true;
   };
 
@@ -62,13 +116,26 @@ const CreateEventScreen = ({ navigation }) => {
     setLoading(true);
     try {
       const headers = getAuthHeader();
+      
+      // Filter enabled ticket types and format data
+      const enabledTicketTypes = Object.entries(ticketTypes)
+        .filter(([_, config]) => config.enabled)
+        .map(([type, config]) => ({
+          type,
+          price: parseFloat(config.price),
+          quantity: parseInt(config.quantity),
+          available_quantity: parseInt(config.quantity)
+        }));
+
+      const eventData = {
+        ...form,
+        max_attendees: parseInt(form.max_attendees) || 0,
+        ticket_types: enabledTicketTypes
+      };
+
       const response = await axios.post(
         `${API_URL}/api/admin/events`,
-        {
-          ...form,
-          max_attendees: parseInt(form.max_attendees),
-          price: parseFloat(form.price)
-        },
+        eventData,
         { headers }
       );
 
@@ -85,6 +152,54 @@ const CreateEventScreen = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const TicketTypeCard = ({ type, config }) => {
+    const typeInfo = TICKET_TYPES.find(t => t.id === type);
+    
+    return (
+      <View style={styles.ticketTypeCard}>
+        <View style={styles.ticketTypeHeader}>
+          <View style={styles.ticketTypeInfo}>
+            <Ionicons name={typeInfo.icon} size={24} color="#000" />
+            <Text style={styles.ticketTypeLabel}>{typeInfo.label}</Text>
+          </View>
+          <Switch
+            value={config.enabled}
+            onValueChange={() => toggleTicketType(type)}
+            trackColor={{ false: '#f0f0f0', true: '#6200ee' }}
+            thumbColor={config.enabled ? '#fff' : '#f4f3f4'}
+          />
+        </View>
+
+        {config.enabled && (
+          <View style={styles.ticketTypeFields}>
+            <View style={styles.ticketTypeRow}>
+              <View style={styles.halfInput}>
+                <Text style={styles.label}>Price (ZAR)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  value={config.price}
+                  onChangeText={text => handleTicketTypeChange(type, 'price', text)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.halfInput}>
+                <Text style={styles.label}>Quantity</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="100"
+                  value={config.quantity}
+                  onChangeText={text => handleTicketTypeChange(type, 'quantity', text)}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+    );
   };
 
   return (
@@ -145,27 +260,31 @@ const CreateEventScreen = ({ navigation }) => {
           />
         </View>
 
-        <View style={styles.row}>
-          <View style={styles.halfInput}>
-            <Text style={styles.label}>Max Attendees *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="100"
-              value={form.max_attendees}
-              onChangeText={text => handleChange('max_attendees', text)}
-              keyboardType="numeric"
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Max Attendees</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="1000"
+            value={form.max_attendees}
+            onChangeText={text => handleChange('max_attendees', text)}
+            keyboardType="numeric"
+          />
+        </View>
+
+        {/* Ticket Types Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Ticket Types</Text>
+          <Text style={styles.sectionSubtitle}>
+            Enable and configure different ticket types for your event
+          </Text>
+
+          {TICKET_TYPES.map(type => (
+            <TicketTypeCard
+              key={type.id}
+              type={type.id}
+              config={ticketTypes[type.id]}
             />
-          </View>
-          <View style={styles.halfInput}>
-            <Text style={styles.label}>Price *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="50.00"
-              value={form.price}
-              onChangeText={text => handleChange('price', text)}
-              keyboardType="decimal-pad"
-            />
-          </View>
+          ))}
         </View>
 
         <TouchableOpacity
@@ -198,6 +317,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     color: '#333',
   },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#333',
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+  },
   inputContainer: {
     marginBottom: 16,
   },
@@ -228,6 +361,39 @@ const styles = StyleSheet.create({
   },
   halfInput: {
     flex: 1,
+  },
+  ticketTypeCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  ticketTypeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  ticketTypeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  ticketTypeLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  ticketTypeFields: {
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 12,
+  },
+  ticketTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   submitButton: {
     backgroundColor: '#6200ee',

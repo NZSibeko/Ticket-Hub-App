@@ -14,8 +14,31 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const API_URL = 'http://localhost:3000';
+
+const getTicketTypeLabel = (type) => {
+  const labels = {
+    early_bird: 'Early Bird',
+    general: 'General',
+    family_group: 'Family/Group',
+    vip: 'VIP',
+    vvip: 'VVIP'
+  };
+  return labels[type] || type;
+};
+
+const getTicketTypeIcon = (type) => {
+  const icons = {
+    early_bird: 'alarm',
+    general: 'person',
+    family_group: 'people',
+    vip: 'star',
+    vvip: 'diamond'
+  };
+  return icons[type] || 'ticket';
+};
 
 const EventManagementScreen = ({ navigation }) => {
   const [events, setEvents] = useState([]);
@@ -33,7 +56,21 @@ const EventManagementScreen = ({ navigation }) => {
     try {
       const headers = getAuthHeader();
       const response = await axios.get(`${API_URL}/zi_events`, { headers });
-      setEvents(response.data.d.results);
+      // Ensure all events have ticket_types
+      const eventsWithTicketTypes = response.data.d.results.map(event => {
+        if (!event.ticket_types || event.ticket_types.length === 0) {
+          event.ticket_types = [
+            {
+              type: 'general',
+              price: event.price || 0,
+              quantity: event.max_attendees || 0,
+              available_quantity: event.max_attendees - (event.current_attendees || 0)
+            }
+          ];
+        }
+        return event;
+      });
+      setEvents(eventsWithTicketTypes);
     } catch (error) {
       console.error('Error fetching events:', error);
       Alert.alert('Error', 'Failed to load events');
@@ -93,6 +130,16 @@ const EventManagementScreen = ({ navigation }) => {
     }
   };
 
+  const handleTicketTypeChange = (index, field, value) => {
+    const updatedTypes = [...selectedEvent.ticket_types];
+    if (field === 'price') {
+      updatedTypes[index].price = parseFloat(value) || 0;
+    } else if (field === 'quantity') {
+      updatedTypes[index].quantity = parseInt(value) || 0;
+    }
+    setSelectedEvent({...selectedEvent, ticket_types: updatedTypes});
+  };
+
   const renderEventItem = ({ item }) => (
     <View style={styles.eventCard}>
       <View style={styles.eventHeader}>
@@ -109,6 +156,20 @@ const EventManagementScreen = ({ navigation }) => {
         {item.event_description}
       </Text>
 
+      <View style={styles.ticketTypesPreview}>
+        {item.ticket_types.slice(0, 3).map((ticketType, index) => (
+          <View key={index} style={styles.ticketTypePreview}>
+            <Ionicons name={getTicketTypeIcon(ticketType.type)} size={14} color="#666" />
+            <Text style={styles.ticketTypePreviewText}>
+              {getTicketTypeLabel(ticketType.type)} - R{ticketType.price.toFixed(2)}
+            </Text>
+          </View>
+        ))}
+        {item.ticket_types.length > 3 && (
+          <Text style={styles.moreTicketTypes}>+{item.ticket_types.length - 3} more</Text>
+        )}
+      </View>
+
       <View style={styles.eventDetails}>
         <Text style={styles.detailText}>
           📅 {new Date(item.start_date).toLocaleDateString()}
@@ -118,9 +179,6 @@ const EventManagementScreen = ({ navigation }) => {
         </Text>
         <Text style={styles.detailText}>
           👥 {item.current_attendees}/{item.max_attendees}
-        </Text>
-        <Text style={styles.detailText}>
-          💰 ${item.price}
         </Text>
       </View>
 
@@ -218,34 +276,58 @@ const EventManagementScreen = ({ navigation }) => {
                   style={styles.input}
                   value={selectedEvent.location}
                   onChangeText={(text) => 
-                    setSelectedEvent({...selectedEvent, location: text})
+                    setSelectedEvent({...SelectedEvent, location: text})
                   }
                 />
               </View>
 
-              <View style={styles.row}>
-                <View style={styles.halfInput}>
-                  <Text style={styles.label}>Max Attendees</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={String(selectedEvent.max_attendees)}
-                    onChangeText={(text) => 
-                      setSelectedEvent({...selectedEvent, max_attendees: parseInt(text) || 0})
-                    }
-                    keyboardType="numeric"
-                  />
-                </View>
-                <View style={styles.halfInput}>
-                  <Text style={styles.label}>Price</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={String(selectedEvent.price)}
-                    onChangeText={(text) => 
-                      setSelectedEvent({...selectedEvent, price: parseFloat(text) || 0})
-                    }
-                    keyboardType="decimal-pad"
-                  />
-                </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Max Attendees</Text>
+                <TextInput
+                  style={styles.input}
+                  value={String(selectedEvent.max_attendees)}
+                  onChangeText={(text) => 
+                    setSelectedEvent({...selectedEvent, max_attendees: parseInt(text) || 0})
+                  }
+                  keyboardType="numeric"
+                />
+              </View>
+
+              {/* Ticket Types Section */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Ticket Types</Text>
+                {selectedEvent.ticket_types?.map((ticketType, index) => (
+                  <View key={index} style={styles.ticketTypeEditCard}>
+                    <View style={styles.ticketTypeHeader}>
+                      <View style={styles.ticketTypeInfo}>
+                        <Ionicons name={getTicketTypeIcon(ticketType.type)} size={20} color="#000" />
+                        <Text style={styles.ticketTypeName}>
+                          {getTicketTypeLabel(ticketType.type)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.row}>
+                      <View style={styles.halfInput}>
+                        <Text style={styles.label}>Price (ZAR)</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={String(ticketType.price)}
+                          onChangeText={(text) => handleTicketTypeChange(index, 'price', text)}
+                          keyboardType="decimal-pad"
+                        />
+                      </View>
+                      <View style={styles.halfInput}>
+                        <Text style={styles.label}>Quantity</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={String(ticketType.quantity)}
+                          onChangeText={(text) => handleTicketTypeChange(index, 'quantity', text)}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ))}
               </View>
 
               <View style={styles.inputContainer}>
@@ -353,6 +435,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 10,
+  },
+  ticketTypesPreview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+    gap: 8,
+  },
+  ticketTypePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  ticketTypePreviewText: {
+    fontSize: 11,
+    color: '#666',
+  },
+  moreTicketTypes: {
+    fontSize: 11,
+    color: '#999',
+    fontStyle: 'italic',
   },
   eventDetails: {
     marginBottom: 15,
@@ -510,6 +616,28 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  ticketTypeEditCard: {
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  ticketTypeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  ticketTypeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ticketTypeName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
   },
 });
 

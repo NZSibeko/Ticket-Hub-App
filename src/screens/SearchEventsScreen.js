@@ -106,10 +106,16 @@ const HomeScreen = ({ navigation }) => {
     }
 
     if (filters.minPrice) {
-      filtered = filtered.filter(event => event.price >= parseFloat(filters.minPrice));
+      filtered = filtered.filter(event => {
+        const minTicketPrice = Math.min(...event.ticket_types.map(t => t.price));
+        return minTicketPrice >= parseFloat(filters.minPrice);
+      });
     }
     if (filters.maxPrice) {
-      filtered = filtered.filter(event => event.price <= parseFloat(filters.maxPrice));
+      filtered = filtered.filter(event => {
+        const maxTicketPrice = Math.max(...event.ticket_types.map(t => t.price));
+        return maxTicketPrice <= parseFloat(filters.maxPrice);
+      });
     }
 
     if (filters.location) {
@@ -123,7 +129,11 @@ const HomeScreen = ({ navigation }) => {
         filtered.sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
         break;
       case 'price':
-        filtered.sort((a, b) => a.price - b.price);
+        filtered.sort((a, b) => {
+          const aMinPrice = Math.min(...a.ticket_types.map(t => t.price));
+          const bMinPrice = Math.min(...b.ticket_types.map(t => t.price));
+          return aMinPrice - bMinPrice;
+        });
         break;
       case 'name':
         filtered.sort((a, b) => a.event_name.localeCompare(b.event_name));
@@ -161,7 +171,7 @@ const HomeScreen = ({ navigation }) => {
   const EventCard = ({ event, index, horizontal = false }) => (
     <TouchableOpacity
       style={[styles.eventCard, horizontal && styles.horizontalCard]}
-      onPress={() => navigation.navigate('PurchaseTicket', { event })}
+      onPress={() => navigation.navigate('EventDetail', { eventId: event.event_id })}
     >
       <View style={styles.imageContainer}>
         <Image
@@ -169,8 +179,10 @@ const HomeScreen = ({ navigation }) => {
           style={styles.eventImage}
           resizeMode="cover"
         />
-        <View style={styles.priceTag}>
-          <Text style={styles.priceText}>R{event.price.toFixed(2)}</Text>
+        <View style={styles.ticketTypesTag}>
+          <Text style={styles.ticketTypesText}>
+            {event.ticket_types?.length || 1} ticket options
+          </Text>
         </View>
       </View>
       
@@ -495,7 +507,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  priceTag: {
+  ticketTypesTag: {
     position: 'absolute',
     top: 12,
     right: 12,
@@ -504,10 +516,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
   },
-  priceText: {
+  ticketTypesText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 12,
+    fontWeight: '600',
   },
   eventInfo: {
     padding: 16,
