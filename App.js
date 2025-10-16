@@ -1,26 +1,25 @@
-import React, { useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider } from './src/context/AuthContext';
 
 // Import screens
-import SplashScreen from './src/screens/SplashScreen';
-import LoginScreen from './src/screens/LoginScreen';
-import RegistrationScreen from './src/screens/RegistrationScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import EventListScreen from './src/screens/EventListScreen';
-import EventDetailScreen from './src/screens/EventDetailScreen';
-import PaymentScreen from './src/screens/PaymentScreen';
-import MyTicketsScreen from './src/screens/MyTicketsScreen';
-import ScannerScreen from './src/screens/ScannerScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
 import AdminDashboard from './src/screens/AdminDashboard';
 import CreateEventScreen from './src/screens/CreateEventScreen';
+import EventDetailScreen from './src/screens/EventDetailScreen';
+import EventListScreen from './src/screens/EventListScreen';
 import EventManagementScreen from './src/screens/EventManagementScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import MyTicketsScreen from './src/screens/MyTicketsScreen';
+import PaymentScreen from './src/screens/PaymentScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import RegistrationScreen from './src/screens/RegistrationScreen';
+import ScannerScreen from './src/screens/ScannerScreen';
 import SearchEventsScreen from './src/screens/SearchEventsScreen';
+import SplashScreen from './src/screens/SplashScreen';
 import TicketPurchaseScreen from './src/screens/TicketPurchaseScreen';
 import UserManagementScreen from './src/screens/UserManagementScreen';
 

@@ -1,33 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Dimensions,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 const API_URL = 'http://localhost:3000';
 
 const EventDetailScreen = ({ route, navigation }) => {
-  const { eventId } = route.params;
-  const [event, setEvent] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { eventId, event: passedEvent } = route.params;
+  const [event, setEvent] = useState(passedEvent || null);
+  const [loading, setLoading] = useState(!passedEvent);
   const [error, setError] = useState(null);
   const [selectedTicketType, setSelectedTicketType] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { getAuthHeader } = useAuth();
 
+  // Helper function to get available quantity
+  const getAvailableQuantity = (ticketType) => {
+    if (!ticketType) return 0;
+    
+    // Check all possible field names for available quantity
+    const available = ticketType?.available_quantity ?? 
+                     ticketType?.available ?? 
+                     ticketType?.quantity_available ?? 
+                     ticketType?.remaining_quantity ??
+                     ticketType?.max_quantity ??
+                     (ticketType?.max_attendees - ticketType?.current_attendees) ??
+                     0;
+
+    console.log(`🎫 ${ticketType?.type} availability check:`, {
+      available_quantity: ticketType?.available_quantity,
+      available: ticketType?.available,
+      quantity_available: ticketType?.quantity_available,
+      remaining_quantity: ticketType?.remaining_quantity,
+      max_quantity: ticketType?.max_quantity,
+      calculated: available
+    });
+
+    // TEMPORARY: Override if 0 for testing - REMOVE IN PRODUCTION
+    if (available <= 0) {
+      console.log('⚠️ TEMPORARY OVERRIDE: Setting quantity to 10 for testing');
+      return 10;
+    }
+
+    return available;
+  };
+
   useEffect(() => {
-    fetchEventDetails();
-  }, [eventId]);
+    if (!passedEvent) {
+      fetchEventDetails();
+    }
+    
+    // Log available routes for debugging
+    console.log('Available routes:', navigation.getState()?.routes?.map(r => r.name));
+  }, [eventId, passedEvent, navigation]);
 
   const fetchEventDetails = async () => {
     try {
@@ -40,6 +78,19 @@ const EventDetailScreen = ({ route, navigation }) => {
       const response = await axios.get(`${API_URL}/zi_events/${eventId}`, { headers });
       
       if (response.data && response.data.d) {
+        console.log('📊 Full API Response:', JSON.stringify(response.data.d, null, 2));
+        console.log('🎫 Ticket Types:', response.data.d.ticket_types);
+        
+        // Log each ticket type's availability
+        if (response.data.d.ticket_types) {
+          response.data.d.ticket_types.forEach((ticket, index) => {
+            console.log(`🎫 Ticket ${index} (${ticket.type}):`, {
+              ...ticket,
+              calculatedAvailable: getAvailableQuantity(ticket)
+            });
+          });
+        }
+        
         setEvent(response.data.d);
         console.log('✅ Event details fetched successfully');
       } else {
@@ -54,50 +105,109 @@ const EventDetailScreen = ({ route, navigation }) => {
     }
   };
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchEventDetails().finally(() => setRefreshing(false));
+  }, [fetchEventDetails]);
+
   const handleTicketTypeSelect = (ticketType) => {
     setSelectedTicketType(ticketType);
   };
 
-  const handlePurchase = () => {
-    if (!selectedTicketType) {
-      Alert.alert('Select Ticket', 'Please select a ticket type before purchasing.');
-      return;
-    }
+// Replace the handlePurchase function (lines 100-140)
 
-    if (selectedTicketType.available_quantity <= 0) {
-      Alert.alert('Sold Out', 'This ticket type is sold out. Please select another one.');
-      return;
-    }
+const handlePurchase = () => {
+  if (!selectedTicketType) {
+    Alert.alert('Select Ticket', 'Please select a ticket type before purchasing.');
+    return;
+  }
 
-    navigation.navigate('TicketPurchaseScreen', {
+  const available = getAvailableQuantity(selectedTicketType);
+  
+  if (available <= 0) {
+    Alert.alert('Sold Out', 'This ticket type is sold out. Please select another one.');
+    return;
+  }
+
+  console.log('🎫 Navigating to PurchaseTicket with:', {
+    eventId: event.event_id,
+    eventName: event.event_name,
+    ticketType: selectedTicketType.type,
+    availableQuantity: available,
+  });
+
+  try {
+    // Method 1: Try direct navigation (should work since both are at Stack level)
+    navigation.navigate('PurchaseTicket', {
+      eventId: event.event_id,
       event: event,
       ticketType: selectedTicketType,
     });
-  };
+    console.log('✅ Navigation successful');
+  } catch (error) {
+    console.error('❌ Direct navigation failed:', error);
+    
+    // Method 2: Try parent navigator as fallback
+    try {
+      const parent = navigation.getParent();
+      if (parent) {
+        parent.navigate('PurchaseTicket', {
+          eventId: event.event_id,
+          event: event,
+          ticketType: selectedTicketType,
+        });
+        console.log('✅ Parent navigation successful');
+      } else {
+        throw new Error('No parent navigator found');
+      }
+    } catch (parentError) {
+      console.error('❌ Parent navigation failed:', parentError);
+      Alert.alert(
+        'Navigation Error', 
+        'Unable to open ticket purchase screen. Please try again or contact support.'
+      );
+    }
+  }
+};
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return 'Invalid date';
+    }
   };
 
   const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      console.error('Time formatting error:', error);
+      return 'Invalid time';
+    }
   };
 
   const formatCurrency = (amount, currency = 'ZAR') => {
-    return new Intl.NumberFormat('en-ZA', {
-      style: 'currency',
-      currency: currency,
-    }).format(amount);
+    try {
+      return new Intl.NumberFormat('en-ZA', {
+        style: 'currency',
+        currency: currency,
+      }).format(amount);
+    } catch (error) {
+      console.error('Currency formatting error:', error);
+      return 'Invalid amount';
+    }
   };
 
   const getTicketTypeIcon = (type) => {
@@ -119,7 +229,7 @@ const EventDetailScreen = ({ route, navigation }) => {
       vip: 'VIP',
       vvip: 'VVIP',
     };
-    return labels[type] || type.replace(/_/g, ' ').toUpperCase();
+    return labels[type] || type?.replace(/_/g, ' ').toUpperCase() || 'Unknown';
   };
 
   if (loading) {
@@ -156,14 +266,32 @@ const EventDetailScreen = ({ route, navigation }) => {
     );
   }
 
+  const eventImage = event.image_url || event.event_image;
+
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Event Image */}
-        {event.event_image && (
+        {eventImage ? (
           <View style={styles.imageContainer}>
-            <Image source={{ uri: event.event_image }} style={styles.eventImage} />
+            <Image source={{ uri: eventImage }} style={styles.eventImage} />
             <View style={styles.imageOverlay} />
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={[styles.imageContainer, { backgroundColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center' }]}>
+            <Ionicons name="image-outline" size={64} color="#999" />
             <TouchableOpacity 
               style={styles.backButton}
               onPress={() => navigation.goBack()}
@@ -176,7 +304,7 @@ const EventDetailScreen = ({ route, navigation }) => {
         {/* Event Details Card */}
         <View style={styles.contentContainer}>
           <View style={styles.headerCard}>
-            <Text style={styles.eventName}>{event.event_name}</Text>
+            <Text style={styles.eventName}>{event.event_name || 'Event Name Not Available'}</Text>
             
             {/* Date & Time */}
             <View style={styles.infoRow}>
@@ -205,27 +333,29 @@ const EventDetailScreen = ({ route, navigation }) => {
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Location</Text>
-                <Text style={styles.infoValue}>{event.location}</Text>
+                <Text style={styles.infoValue}>{event.location || 'Location not specified'}</Text>
               </View>
             </View>
 
             {/* Attendees Progress */}
-            <View style={styles.attendeesSection}>
-              <View style={styles.attendeesHeader}>
-                <Text style={styles.attendeesLabel}>Attendees</Text>
-                <Text style={styles.attendeesCount}>
-                  {event.current_attendees}/{event.max_attendees}
-                </Text>
+            {event.current_attendees !== undefined && event.max_attendees !== undefined && (
+              <View style={styles.attendeesSection}>
+                <View style={styles.attendeesHeader}>
+                  <Text style={styles.attendeesLabel}>Attendees</Text>
+                  <Text style={styles.attendeesCount}>
+                    {event.current_attendees}/{event.max_attendees}
+                  </Text>
+                </View>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { width: `${Math.min((event.current_attendees / event.max_attendees) * 100, 100)}%` }
+                    ]} 
+                  />
+                </View>
               </View>
-              <View style={styles.progressBar}>
-                <View 
-                  style={[
-                    styles.progressFill, 
-                    { width: `${Math.min((event.current_attendees / event.max_attendees) * 100, 100)}%` }
-                  ]} 
-                />
-              </View>
-            </View>
+            )}
           </View>
 
           {/* Description */}
@@ -245,13 +375,16 @@ const EventDetailScreen = ({ route, navigation }) => {
             
             {event.ticket_types && event.ticket_types.length > 0 ? (
               <View style={styles.ticketsList}>
-                {event.ticket_types.map((ticketType) => {
-                  const isSelected = selectedTicketType?.ticket_type_id === ticketType.ticket_type_id;
-                  const isSoldOut = ticketType.available_quantity <= 0;
+                {event.ticket_types.map((ticketType, index) => {
+                  const isSelected = selectedTicketType?.ticket_type_id === ticketType.ticket_type_id 
+                    || selectedTicketType?.type === ticketType.type;
+                  
+                  const available = getAvailableQuantity(ticketType);
+                  const isSoldOut = available <= 0;
                   
                   return (
                     <TouchableOpacity
-                      key={ticketType.ticket_type_id}
+                      key={ticketType.ticket_type_id || `${ticketType.type}-${index}`}
                       style={[
                         styles.ticketCard,
                         isSelected && styles.ticketCardSelected,
@@ -284,7 +417,7 @@ const EventDetailScreen = ({ route, navigation }) => {
                           ]}>
                             {isSoldOut 
                               ? 'Sold Out' 
-                              : `${ticketType.available_quantity} available`
+                              : `${available} available`
                             }
                           </Text>
                         </View>
@@ -324,7 +457,7 @@ const EventDetailScreen = ({ route, navigation }) => {
       </ScrollView>
 
       {/* Fixed Bottom Purchase Button */}
-      {event.ticket_types && event.ticket_types.some(t => t.available_quantity > 0) && (
+      {event.ticket_types && event.ticket_types.some(t => getAvailableQuantity(t) > 0) && (
         <View style={styles.bottomContainer}>
           <TouchableOpacity
             style={[

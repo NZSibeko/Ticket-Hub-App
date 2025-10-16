@@ -41,3 +41,13 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Web build output
+dist/
+web-build/
+
+# Webpack cache
+.cache/
+
+# Production build
+build/
