@@ -79,234 +79,150 @@ const TicketPurchaseScreen = ({ route, navigation }) => {
     ]).start();
   };
 
-/*   const handlePurchase = async () => {
+  const handlePurchase = async () => {
+    if (!quantity || quantity < 1) {
+      Alert.alert('Invalid Quantity', 'Please select at least 1 ticket.');
+      return;
+    }
+
+    // Check if user is logged in
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please log in to purchase tickets',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Log In',
+            onPress: () => navigation.navigate('Login')
+          }
+        ]
+      );
+      return;
+    }
+
+    const totalAmount = ticketType.price * quantity;
+
+    setLoading(true);
+
     try {
-      setLoading(true);
-
-      if (!event || !ticketType || !user) {
-        throw new Error('Missing required information for purchase.');
-      }
-
-      const availableQuantity = getAvailableQuantity(ticketType);
-      
-      // Check if requested quantity is available
-      if (quantity > availableQuantity) {
-        Alert.alert(
-          'Not Enough Tickets',
-          `Only ${availableQuantity} tickets available for ${getTicketTypeLabel(ticketType.type)}. Please adjust your quantity.`,
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      console.log('🛒 Starting purchase process:', {
-        eventId: event.event_id,
-        ticketTypeId: ticketType.ticket_type_id,
+      console.log('🎫 Processing purchase:', {
+        event: event.event_name,
+        ticketType: ticketType.type,
         quantity,
-        availableQuantity,
-        price: ticketType.price,
-        customerId: user.customer_id
+        totalAmount,
+        customerId: user.customer_id,
       });
 
-      const headers = getAuthHeader();
+      const headers = await getAuthHeader();
 
-      const paymentResponse = await axios.post(
-        `${API_URL}/api/payments/create-payment-intent`,
-        {
-          amount: ticketType.price * quantity,
-          currency: event.currency || 'ZAR',
-          eventId: event.event_id,
-          customerId: user.customer_id,
-          ticketTypeId: ticketType.ticket_type_id,
-          quantity: quantity,
-        },
-        { headers }
-      );
+      // Prepare purchase data
+      const purchaseData = {
+        event_id: event.event_id,
+        customer_id: user.customer_id,
+        ticket_type_id: ticketType.ticket_type_id,
+        ticket_type: ticketType.type,
+        quantity: quantity,
+        unit_price: ticketType.price,
+        total_amount: totalAmount,
+        currency: event.currency || 'ZAR',
+        payment_method: 'credit_card',
+      };
 
-      if (paymentResponse.data.success || paymentResponse.data.paymentIntentId) {
-        const confirmResponse = await axios.post(
+      try {
+        // Try real API first
+        const response = await axios.post(
           `${API_URL}/api/payments/confirm-payment`,
-          {
-            paymentIntentId: paymentResponse.data.paymentIntentId,
-            eventId: event.event_id,
-            customerId: user.customer_id,
-            ticketTypeId: ticketType.ticket_type_id,
-            quantity: quantity,
-            price: ticketType.price,
-            totalAmount: ticketType.price * quantity,
-            currency: event.currency || 'ZAR',
-          },
+          purchaseData,
           { headers }
         );
 
-        if (confirmResponse.data.success) {
-          Alert.alert(
-            'Success! 🎉',
-            `You've successfully purchased ${quantity} ${getTicketTypeLabel(ticketType.type)} ticket${quantity > 1 ? 's' : ''}`,
-            [
-              {
-                text: 'View My Tickets',
-                onPress: () => navigation.navigate('MyTickets'),
-              },
-              {
-                text: 'Browse More Events',
-                onPress: () => navigation.navigate('HomeTab'),
-                style: 'cancel',
-              },
-            ]
-          );
+        console.log('✅ Purchase successful:', response.data);
+
+        // Navigate to PaymentSuccessScreen with booking details
+        navigation.navigate('PaymentSuccess', {
+          bookingDetails: {
+            eventName: event.event_name,
+            ticketCount: quantity,
+            totalAmount: totalAmount,
+            bookingId: `BK${Date.now()}`,
+            eventDate: event.start_date,
+            location: event.location,
+            ticketType: ticketType.type,
+            currency: event.currency || 'ZAR'
+          }
+        });
+
+      } catch (apiError) {
+        console.log('⚠️ API not available, using mock purchase');
+
+        // MOCK PURCHASE - Remove this in production!
+        if (apiError.response?.status === 404 || apiError.code === 'ERR_BAD_REQUEST') {
+          // Simulate successful purchase
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Generate mock ticket
+          const mockTicket = {
+            ticket_id: `MOCK-${Date.now()}`,
+            ticket_code: `TKT-${event.event_id}-${Date.now()}`,
+            event_id: event.event_id,
+            event_name: event.event_name,
+            event_date: event.start_date,
+            location: event.location,
+            ticket_type: ticketType.type,
+            quantity: quantity,
+            price: ticketType.price,
+            total_amount: totalAmount,
+            currency: event.currency || 'ZAR',
+            ticket_status: 'ACTIVE',
+            purchase_date: new Date().toISOString(),
+            image_url: event.image_url || event.event_image,
+          };
+
+          console.log('✅ Mock purchase created:', mockTicket);
+
+          // Store mock ticket in localStorage for demo purposes
+          try {
+            const existingTickets = JSON.parse(localStorage.getItem('mockTickets') || '[]');
+            existingTickets.push(mockTicket);
+            localStorage.setItem('mockTickets', JSON.stringify(existingTickets));
+          } catch (storageError) {
+            console.log('Could not save to localStorage:', storageError);
+          }
+
+          // Navigate to PaymentSuccessScreen with booking details
+          navigation.navigate('PaymentSuccess', {
+            bookingDetails: {
+              eventName: event.event_name,
+              ticketCount: quantity,
+              totalAmount: totalAmount,
+              bookingId: `MOCK-BK${Date.now()}`,
+              eventDate: event.start_date,
+              location: event.location,
+              ticketType: ticketType.type,
+              currency: event.currency || 'ZAR'
+            }
+          });
+
         } else {
-          throw new Error(confirmResponse.data.error || 'Payment confirmation failed');
+          // Real error, not just missing endpoint
+          throw apiError;
         }
-      } else {
-        throw new Error(paymentResponse.data.error || 'Failed to create payment');
       }
     } catch (error) {
-      console.error('Purchase error:', error);
+      console.error('❌ Purchase error:', error);
       Alert.alert(
         'Purchase Failed',
-        error.message || 'Something went wrong. Please try again.',
+        error.response?.data?.message || error.message || 'An error occurred during purchase. Please try again.',
         [{ text: 'OK' }]
       );
     } finally {
       setLoading(false);
     }
-  }; */
-
-  // Add this mock payment handler to your TicketPurchaseScreen.js
-// Replace the handlePurchase function
-
-const handlePurchase = async () => {
-  if (!quantity || quantity < 1) {
-    Alert.alert('Invalid Quantity', 'Please select at least 1 ticket.');
-    return;
-  }
-
-  if (!user) {
-    Alert.alert('Authentication Required', 'Please login to purchase tickets.');
-    navigation.navigate('Login');
-    return;
-  }
-
-  const totalAmount = ticketType.price * quantity;
-
-  setLoading(true);
-
-  try {
-    console.log('🎫 Processing purchase:', {
-      event: event.event_name,
-      ticketType: ticketType.type,
-      quantity,
-      totalAmount,
-      customerId: user.customer_id,
-    });
-
-    const headers = await getAuthHeader();
-
-    // Prepare purchase data
-    const purchaseData = {
-      event_id: event.event_id,
-      customer_id: user.customer_id,
-      ticket_type_id: ticketType.ticket_type_id,
-      ticket_type: ticketType.type,
-      quantity: quantity,
-      unit_price: ticketType.price,
-      total_amount: totalAmount,
-      currency: event.currency || 'ZAR',
-      payment_method: 'credit_card', // You can add payment method selection
-    };
-
-    try {
-      // Try real API first
-      const response = await axios.post(
-        `${API_URL}/api/payments/confirm-payment`,
-        purchaseData,
-        { headers }
-      );
-
-      console.log('✅ Purchase successful:', response.data);
-
-      // Success - show simple alert and redirect
-      Alert.alert(
-        'Success!',
-        `Purchase complete! ${quantity} ticket(s) purchased.`,
-        [{ text: 'OK', onPress: () => navigation.navigate('SearchEvent') }]
-      );
-      
-      // Fallback redirect in case alert doesn't show
-      setTimeout(() => {
-        navigation.navigate('SearchEvent');
-      }, 2000);
-    } catch (apiError) {
-      console.log('⚠️ API not available, using mock purchase');
-
-      // MOCK PURCHASE - Remove this in production!
-      if (apiError.response?.status === 404 || apiError.code === 'ERR_BAD_REQUEST') {
-        // Simulate successful purchase
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
-
-        // Generate mock ticket
-        const mockTicket = {
-          ticket_id: `MOCK-${Date.now()}`,
-          ticket_code: `TKT-${event.event_id}-${Date.now()}`,
-          event_id: event.event_id,
-          event_name: event.event_name,
-          event_date: event.start_date,
-          location: event.location,
-          ticket_type: ticketType.type,
-          quantity: quantity,
-          price: ticketType.price,
-          total_amount: totalAmount,
-          currency: event.currency || 'ZAR',
-          ticket_status: 'ACTIVE',
-          purchase_date: new Date().toISOString(),
-          image_url: event.image_url || event.event_image,
-        };
-
-        console.log('✅ Mock purchase created:', mockTicket);
-
-        // Store mock ticket in localStorage for demo purposes
-        try {
-          const existingTickets = JSON.parse(localStorage.getItem('mockTickets') || '[]');
-          existingTickets.push(mockTicket);
-          localStorage.setItem('mockTickets', JSON.stringify(existingTickets));
-        } catch (storageError) {
-          console.log('Could not save to localStorage:', storageError);
-        }
-
-        // Show success alert after short delay
-        setTimeout(() => {
-          Alert.alert(
-            'Purchase Successful (Demo)',
-            `Your demo purchase is complete!\n\n${quantity} ${ticketType.type} ticket(s)\nEvent: ${event.event_name}\nTotal: ${totalAmount.toFixed(2)} ${event.currency || 'ZAR'}\n\nThis is a demo purchase.`,
-            [
-              {
-                text: 'Browse Events',
-                onPress: () => navigation.navigate('SearchEvent')
-              },
-              {
-                text: 'My Tickets',
-                onPress: () => navigation.navigate('MyTickets')
-              }
-            ]
-          );
-        }, 100);
-      } else {
-        // Real error, not just missing endpoint
-        throw apiError;
-      }
-    }
-  } catch (error) {
-    console.error('❌ Purchase error:', error);
-    Alert.alert(
-      'Purchase Failed',
-      error.response?.data?.message || error.message || 'An error occurred during purchase. Please try again.',
-      [{ text: 'OK' }]
-    );
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const increaseQuantity = () => {
     const availableQuantity = getAvailableQuantity(ticketType);

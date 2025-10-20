@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#000',
   },
   headerContent: {
     flex: 1,
@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: '#ffffff',
     marginBottom: 4,
   },
   headerSubtitle: {
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
   },
   searchButton: {
     padding: 8,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#000',
     borderRadius: 12,
   },
   

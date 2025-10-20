@@ -1,22 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
+import * as ImagePicker from 'expo-image-picker';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Image,
+  Dimensions,
   Modal,
-  RefreshControl
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
-import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import ScreenContainer from '../components/ScreenContainer';
+import { useAuth } from '../context/AuthContext';
 
+const { width } = Dimensions.get('window');
 const API_URL = 'http://localhost:3000';
 
 const ProfileScreen = ({ navigation }) => {
@@ -25,8 +26,6 @@ const ProfileScreen = ({ navigation }) => {
   const [image, setImage] = useState(null);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Dashboard stats
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
@@ -73,7 +72,6 @@ const ProfileScreen = ({ navigation }) => {
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
-      // Use mock data for demo
       setStats({
         totalEvents: 12,
         totalTickets: 450,
@@ -111,6 +109,10 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
+  const handleEditProfile = () => {
+    Alert.alert('Edit Profile', 'Profile editing feature coming soon');
+  };
+
   const handleLogout = () => {
     setLogoutModalVisible(true);
   };
@@ -120,7 +122,8 @@ const ProfileScreen = ({ navigation }) => {
     setLoading(true);
     try {
       await logout();
-      navigation.replace('Login');
+      // Navigate to SearchEventsScreen after logout
+      navigation.navigate('SearchEventsScreen');
     } catch (error) {
       Alert.alert('Error', 'Failed to logout');
     } finally {
@@ -128,29 +131,91 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
+  const handleMyTicketsPress = () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please log in to view your tickets',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Log In',
+            onPress: () => navigation.navigate('Login')
+          }
+        ]
+      );
+    } else {
+      navigation.navigate('MyTickets');
+    }
+  };
+
+  const handleBrowseEvents = () => {
+    // UPDATED: Navigate directly to SearchEventsScreen
+    navigation.navigate('SearchEventsScreen');
+  };
+
+  // Modern Minimalist Stat Card for Dashboard Overview
   const StatCard = ({ icon, value, label, color }) => (
-    <View style={[styles.statCard, { backgroundColor: color }]}>
-      <Ionicons name={icon} size={28} color="#fff" style={styles.statIcon} />
+    <View style={styles.statCard}>
+      <View style={[styles.statIconContainer, { backgroundColor: color }]}>
+        <Ionicons name={icon} size={16} color="#fff" />
+      </View>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 
-  const ProfileOption = ({ icon, title, subtitle, onPress, showArrow = true, color = '#000' }) => (
+  // Modern Minimalist Action Card for Quick Actions
+  const ActionCard = ({ icon, title, color, onPress }) => (
+    <TouchableOpacity 
+      style={styles.actionCard}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.actionIcon, { backgroundColor: color }]}>
+        <Ionicons name={icon} size={20} color="#fff" />
+      </View>
+      <Text style={styles.actionTitle}>{title}</Text>
+    </TouchableOpacity>
+  );
+
+  // Support Action Card for Support Section
+  const SupportCard = ({ icon, title, subtitle, onPress, color = '#64748b' }) => (
+    <TouchableOpacity 
+      style={styles.supportCard}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.supportIconContainer, { backgroundColor: color + '15' }]}>
+        <Ionicons name={icon} size={20} color={color} />
+      </View>
+      <View style={styles.supportContent}>
+        <Text style={styles.supportTitle}>{title}</Text>
+        <Text style={styles.supportSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
+    </TouchableOpacity>
+  );
+
+  // Keep original ProfileOption for other sections
+  const ProfileOption = ({ icon, title, subtitle, onPress, showArrow = true, color = '#6366f1' }) => (
     <TouchableOpacity 
       style={styles.optionCard}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
-        <Ionicons name={icon} size={24} color={color} />
+      <View style={[styles.optionIconContainer, { backgroundColor: color + '15' }]}>
+        <Ionicons name={icon} size={18} color={color} />
       </View>
       <View style={styles.optionContent}>
         <Text style={styles.optionTitle}>{title}</Text>
         {subtitle && <Text style={styles.optionSubtitle}>{subtitle}</Text>}
       </View>
       {showArrow && (
-        <Ionicons name="chevron-forward" size={24} color="#999" />
+        <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
       )}
     </TouchableOpacity>
   );
@@ -173,19 +238,135 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
+  // Not logged in state - Simplified with direct access to events
   if (!user) {
     return (
       <ScreenContainer>
-        <View style={styles.centered}>
-          <Ionicons name="person-circle-outline" size={80} color="#ccc" />
-          <Text style={styles.notLoggedInText}>Please login to view your profile</Text>
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={() => navigation.navigate('Login')}
-          >
-            <Text style={styles.loginButtonText}>Go to Login</Text>
-          </TouchableOpacity>
-        </View>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Welcome Header for Non-Logged In Users */}
+          <View style={styles.profileHeader}>
+            <View style={styles.profileInfo}>
+              <View style={styles.welcomeIconContainer}>
+                <Ionicons name="person-circle-outline" size={60} color="#6366f1" />
+              </View>
+              <Text style={styles.welcomeTitle}>Welcome to Ticket-Hub</Text>
+              <Text style={styles.welcomeSubtitle}>
+                Browse events and discover amazing experiences. Log in to purchase tickets and manage your account.
+              </Text>
+            </View>
+          </View>
+
+          {/* Quick Access Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Quick Access</Text>
+            <View style={styles.actionsGrid}>
+              <ActionCard
+                icon="search"
+                title="Browse Events"
+                color="#6366f1"
+                onPress={handleBrowseEvents}
+              />
+              <ActionCard
+                icon="calendar-outline"
+                title="Upcoming"
+                color="#10b981"
+                onPress={handleBrowseEvents}
+              />
+              <ActionCard
+                icon="star-outline"
+                title="Featured"
+                color="#f59e0b"
+                onPress={handleBrowseEvents}
+              />
+            </View>
+          </View>
+
+          {/* My Tickets Section - Show login prompt */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Tickets</Text>
+            <View style={styles.loginPromptCard}>
+              <View style={styles.loginPromptIcon}>
+                <Ionicons name="ticket-outline" size={32} color="#64748b" />
+              </View>
+              <View style={styles.loginPromptContent}>
+                <Text style={styles.loginPromptTitle}>Log in to see your tickets</Text>
+                <Text style={styles.loginPromptSubtitle}>
+                  Sign in to view your purchased tickets and event history
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Authentication Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            
+            <TouchableOpacity
+              style={styles.loginButtonCard}
+              onPress={() => navigation.navigate('Login')}
+            >
+              <View style={styles.loginButtonIcon}>
+                <Ionicons name="log-in-outline" size={20} color="#fff" />
+              </View>
+              <View style={styles.loginButtonContent}>
+                <Text style={styles.loginButtonTitle}>Log In</Text>
+                <Text style={styles.loginButtonSubtitle}>Access your existing account</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.signupButtonCard}
+              onPress={() => navigation.navigate('Registration')}
+            >
+              <View style={styles.signupButtonIcon}>
+                <Ionicons name="person-add-outline" size={20} color="#fff" />
+              </View>
+              <View style={styles.signupButtonContent}>
+                <Text style={styles.signupButtonTitle}>Create Account</Text>
+                <Text style={styles.signupButtonSubtitle}>Join Ticket-Hub today</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Support Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Support</Text>
+            
+            <SupportCard
+              icon="help-circle-outline"
+              title="Help Center"
+              subtitle="Get help and support"
+              onPress={() => Alert.alert('Help Center', 'Contact support@ticket-hub.com')}
+              color="#6366f1"
+            />
+            
+            <SupportCard
+              icon="document-text-outline"
+              title="Terms & Conditions"
+              subtitle="Read terms of service"
+              onPress={() => Alert.alert('Terms & Conditions', 'Terms coming soon')}
+              color="#10b981"
+            />
+            
+            <SupportCard
+              icon="information-circle-outline"
+              title="About"
+              subtitle="App information"
+              onPress={() => Alert.alert('About', 'Ticket-Hub v1.0.0\nYour gateway to amazing events')}
+              color="#f59e0b"
+            />
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>© 2024 Ticket-Hub. All rights reserved.</Text>
+          </View>
+        </ScrollView>
       </ScreenContainer>
     );
   }
@@ -195,268 +376,256 @@ const ProfileScreen = ({ navigation }) => {
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={true}
-        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        scrollEventThrottle={16}
-        bounces={true}
       >
-        {/* Profile Info Card */}
-        <View style={styles.profileCard}>
-          <TouchableOpacity 
-            style={styles.avatarContainer}
-            onPress={handleImagePick}
-          >
-            {image ? (
-              <Image source={{ uri: image }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={60} color="#fff" />
-              </View>
-            )}
-            <View style={styles.editBadge}>
-              <Ionicons name="camera" size={16} color="#fff" />
+        {/* Minimalist Profile Header - Removed profile pic and email, kept role badge */}
+        <View style={styles.profileHeader}>
+          <View style={styles.profileInfo}>
+            <Text style={styles.userName}>{getUserDisplayName()}</Text>
+            
+            {/* Restored Role Badge */}
+            <View style={styles.roleBadgeContainer}>
+              {isAdmin() && (
+                <View style={[styles.roleBadge, styles.adminBadge]}>
+                  <Ionicons name="shield-checkmark" size={10} color="#fff" />
+                  <Text style={styles.roleBadgeText}>{getAdminRoleDisplay()}</Text>
+                </View>
+              )}
+              {isCustomer() && (
+                <View style={[styles.roleBadge, styles.customerBadge]}>
+                  <Ionicons name="person" size={10} color="#fff" />
+                  <Text style={styles.roleBadgeText}>Customer</Text>
+                </View>
+              )}
             </View>
-          </TouchableOpacity>
 
-          <Text style={styles.userName}>
-            {getUserDisplayName()}
-          </Text>
-          <Text style={styles.userEmail}>{getUserEmail()}</Text>
-          
-          {isAdmin() && (
-            <View style={styles.adminBadge}>
-              <Ionicons name="shield-checkmark" size={16} color="#fff" />
-              <Text style={styles.adminBadgeText}>{getAdminRoleDisplay()}</Text>
-            </View>
-          )}
-
-          {isCustomer() && (
-            <View style={styles.customerBadge}>
-              <Ionicons name="person" size={16} color="#fff" />
-              <Text style={styles.customerBadgeText}>Customer</Text>
-            </View>
-          )}
+            <TouchableOpacity 
+              style={styles.editProfileButton}
+              onPress={handleEditProfile}
+            >
+              <Ionicons name="create-outline" size={14} color="#6366f1" />
+              <Text style={styles.editProfileText}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Admin Dashboard Section - Only visible to admins */}
+        {/* Admin Dashboard Section */}
         {isAdmin() && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Admin Dashboard</Text>
-              <TouchableOpacity onPress={fetchDashboardStats}>
-                <Ionicons name="refresh" size={20} color="#666" />
+              <Text style={styles.sectionTitle}>Dashboard Overview</Text>
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={fetchDashboardStats}
+              >
+                <Ionicons name="refresh" size={14} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            {/* Dashboard Stats */}
+            {/* Modern Minimalist Stats Grid */}
             {statsLoading ? (
               <View style={styles.statsLoadingContainer}>
-                <ActivityIndicator size="large" color="#6200ee" />
+                <ActivityIndicator size="small" color="#6366f1" />
               </View>
             ) : stats ? (
               <View style={styles.statsGrid}>
                 <StatCard
                   icon="calendar"
                   value={stats.totalEvents || 0}
-                  label="Total Events"
-                  color="#6200ee"
+                  label="Events"
+                  color="#6366f1"
                 />
                 <StatCard
                   icon="ticket"
                   value={stats.totalTickets || 0}
-                  label="Tickets Sold"
-                  color="#2196F3"
+                  label="Tickets"
+                  color="#10b981"
                 />
                 <StatCard
                   icon="cash"
-                  value={`R${(stats.totalRevenue || 0).toFixed(0)}`}
+                  value={`R${((stats.totalRevenue || 0) / 1000).toFixed(0)}K`}
                   label="Revenue"
-                  color="#4CAF50"
+                  color="#f59e0b"
                 />
                 <StatCard
                   icon="people"
                   value={stats.totalCustomers || 0}
                   label="Customers"
-                  color="#FF9800"
+                  color="#ef4444"
                 />
               </View>
-            ) : (
-              <View style={styles.statsErrorContainer}>
-                <Ionicons name="alert-circle-outline" size={40} color="#ccc" />
-                <Text style={styles.statsErrorText}>Unable to load stats</Text>
-                <TouchableOpacity 
-                  style={styles.retryButton}
-                  onPress={fetchDashboardStats}
-                >
-                  <Text style={styles.retryButtonText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            ) : null}
 
-            {/* Admin Quick Actions */}
-            <View style={styles.quickActionsContainer}>
+            {/* Modern Minimalist Quick Actions - 3 per row */}
+            <View style={styles.quickActions}>
               <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-              
-              <ProfileOption
-                icon="qr-code-outline"
-                title="QR Code Scanner"
-                subtitle="Scan and validate event tickets"
-                onPress={() => navigation.navigate('Scanner')}
-                color="#FF4444"
-              />
-
-              <ProfileOption
-                icon="analytics"
-                title="Full Dashboard"
-                subtitle="View detailed analytics"
-                onPress={() => navigation.navigate('AdminDashboard')}
-                color="#6200ee"
-              />
-              
-              <ProfileOption
-                icon="calendar"
-                title="Manage Events"
-                subtitle="Edit and manage all events"
-                onPress={() => navigation.navigate('EventManagement')}
-                color="#2196F3"
-              />
-              
-              <ProfileOption
-                icon="add-circle"
-                title="Create New Event"
-                subtitle="Add a new event"
-                onPress={() => navigation.navigate('CreateEvent')}
-                color="#4CAF50"
-              />
-
-              <ProfileOption
-                icon="people"
-                title="User Management"
-                subtitle="Manage customers and staff roles"
-                onPress={() => navigation.navigate('UserManagement')}
-                color="#9C27B0"
-              />
+              <View style={styles.actionsGrid}>
+                <ActionCard
+                  icon="qr-code"
+                  title="Scanner"
+                  color="#ef4444"
+                  onPress={() => navigation.navigate('Scanner')}
+                />
+                <ActionCard
+                  icon="analytics"
+                  title="Analytics"
+                  color="#6366f1"
+                  onPress={() => navigation.navigate('AdminDashboard')}
+                />
+                <ActionCard
+                  icon="calendar"
+                  title="Events"
+                  color="#10b981"
+                  onPress={() => navigation.navigate('EventManagement')}
+                />
+                <ActionCard
+                  icon="add-circle"
+                  title="Create"
+                  color="#f59e0b"
+                  onPress={() => navigation.navigate('CreateEvent')}
+                />
+                <ActionCard
+                  icon="people"
+                  title="Users"
+                  color="#8b5cf6"
+                  onPress={() => navigation.navigate('UserManagement')}
+                />
+                <ActionCard
+                  icon="settings"
+                  title="Settings"
+                  color="#64748b"
+                  onPress={() => navigation.navigate('AdminSettings')}
+                />
+              </View>
             </View>
           </View>
         )}
 
-        {/* Account Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>My Account</Text>
-          
-          <ProfileOption
-            icon="ticket"
-            title="My Tickets"
-            subtitle="View your purchased tickets"
-            onPress={() => navigation.navigate('MyTickets')}
-            color="#000"
-          />
-          
-          <ProfileOption
-            icon="calendar-outline"
-            title="Browse Events"
-            subtitle="Discover upcoming events"
-            onPress={() => navigation.navigate('HomeTab')}
-            color="#000"
-          />
-          
-          <ProfileOption
-            icon="heart-outline"
-            title="Favorites"
-            subtitle="Your saved events"
-            onPress={() => Alert.alert('Coming Soon', 'Favorites feature coming soon')}
-            color="#FF4444"
-          />
+        {/* My Account Section - Keep for customers only */}
+        {isCustomer() && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Account</Text>
+            
+            <ProfileOption
+              icon="ticket"
+              title="My Tickets"
+              subtitle="View purchased tickets"
+              onPress={handleMyTicketsPress}
+              color="#6366f1"
+            />
+            
+            <ProfileOption
+              icon="calendar-outline"
+              title="Browse Events"
+              subtitle="Discover upcoming events"
+              onPress={handleBrowseEvents}
+              color="#3b82f6"
+            />
+            
+            <ProfileOption
+              icon="heart-outline"
+              title="Favorites"
+              subtitle="Your saved events"
+              onPress={() => Alert.alert('Coming Soon', 'Favorites feature coming soon')}
+              color="#ef4444"
+            />
 
-          {isCustomer() && (
             <ProfileOption
               icon="card-outline"
               title="Payment Methods"
-              subtitle="Manage your payment options"
+              subtitle="Manage payment options"
               onPress={() => Alert.alert('Coming Soon', 'Payment methods coming soon')}
-              color="#000"
+              color="#f59e0b"
             />
-          )}
-        </View>
+          </View>
+        )}
 
-        {/* Settings Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Settings</Text>
-          
-          <ProfileOption
-            icon="person-outline"
-            title="Edit Profile"
-            subtitle="Update your personal information"
-            onPress={() => Alert.alert('Coming Soon', 'Profile editing coming soon')}
-            color="#000"
-          />
-          
-          <ProfileOption
-            icon="notifications-outline"
-            title="Notifications"
-            subtitle="Manage notification preferences"
-            onPress={() => Alert.alert('Coming Soon', 'Notification settings coming soon')}
-            color="#000"
-          />
-          
-          <ProfileOption
-            icon="shield-outline"
-            title="Privacy & Security"
-            subtitle="Control your privacy settings"
-            onPress={() => Alert.alert('Coming Soon', 'Privacy settings coming soon')}
-            color="#000"
-          />
-
-          {isAdmin() && (
+        {/* Settings Section - Keep original design for customers, removed for admins since it's in Quick Actions */}
+        {isCustomer() && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Settings</Text>
+            
             <ProfileOption
-              icon="settings-outline"
-              title="Admin Settings"
-              subtitle="System configuration"
-              onPress={() => Alert.alert('Coming Soon', 'Admin settings coming soon')}
-              color="#6200ee"
+              icon="person-outline"
+              title="Edit Profile"
+              subtitle="Update personal information"
+              onPress={() => Alert.alert('Coming Soon', 'Profile editing coming soon')}
+              color="#64748b"
             />
-          )}
-        </View>
+            
+            <ProfileOption
+              icon="notifications-outline"
+              title="Notifications"
+              subtitle="Manage preferences"
+              onPress={() => Alert.alert('Coming Soon', 'Notification settings coming soon')}
+              color="#64748b"
+            />
+            
+            <ProfileOption
+              icon="shield-outline"
+              title="Privacy & Security"
+              subtitle="Control privacy settings"
+              onPress={() => Alert.alert('Coming Soon', 'Privacy settings coming soon')}
+              color="#64748b"
+            />
+          </View>
+        )}
 
-        {/* Support Section */}
+        {/* Support Section - Updated to use card display */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           
-          <ProfileOption
+          <SupportCard
             icon="help-circle-outline"
             title="Help Center"
             subtitle="Get help and support"
             onPress={() => Alert.alert('Help Center', 'Contact support@ticket-hub.com')}
-            color="#000"
+            color="#6366f1"
           />
           
-          <ProfileOption
+          <SupportCard
             icon="document-text-outline"
             title="Terms & Conditions"
-            subtitle="Read our terms of service"
+            subtitle="Read terms of service"
             onPress={() => Alert.alert('Terms & Conditions', 'Terms coming soon')}
-            color="#000"
+            color="#10b981"
           />
           
-          <ProfileOption
+          <SupportCard
             icon="information-circle-outline"
             title="About"
-            subtitle="Version 1.0.0"
+            subtitle="App information"
             onPress={() => Alert.alert('About', 'Ticket-Hub v1.0.0\nYour gateway to amazing events')}
-            color="#000"
+            color="#f59e0b"
+          />
+
+          <SupportCard
+            icon="chatbubble-outline"
+            title="Contact Support"
+            subtitle="Get in touch with our team"
+            onPress={() => Alert.alert('Contact Support', 'Email: support@ticket-hub.com\nPhone: +27 11 123 4567')}
+            color="#ef4444"
+          />
+
+          <SupportCard
+            icon="shield-checkmark-outline"
+            title="Privacy Policy"
+            subtitle="How we protect your data"
+            onPress={() => Alert.alert('Privacy Policy', 'Privacy policy details coming soon')}
+            color="#8b5cf6"
           />
         </View>
 
-        {/* Logout Button */}
+        {/* Logout Button - Keep original design */}
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
           disabled={loading}
         >
-          <Ionicons name="log-out-outline" size={24} color="#fff" />
+          <Ionicons name="log-out-outline" size={16} color="#ef4444" />
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
 
@@ -465,7 +634,7 @@ const ProfileScreen = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      {/* Logout Confirmation Modal */}
+      {/* Logout Confirmation Modal - Keep original design */}
       <Modal
         visible={logoutModalVisible}
         animationType="fade"
@@ -475,7 +644,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIcon}>
-              <Ionicons name="log-out-outline" size={48} color="#000" />
+              <Ionicons name="log-out-outline" size={40} color="#ef4444" />
             </View>
             <Text style={styles.modalTitle}>Logout</Text>
             <Text style={styles.modalMessage}>
@@ -501,25 +670,22 @@ const ProfileScreen = ({ navigation }) => {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#000" />
+          <ActivityIndicator size="large" color="#6366f1" />
         </View>
       )}
     </ScreenContainer>
   );
 };
 
+// ... (styles remain exactly the same as in the previous version)
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
   scrollView: {
     flex: 1,
-    width: '100%',
   },
   scrollViewContent: {
     flexGrow: 1,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   centered: {
     flex: 1,
@@ -527,243 +693,434 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
   },
-  notLoggedInText: {
-    fontSize: 18,
-    color: '#666',
-    marginTop: 20,
-    marginBottom: 30,
+  lockIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+  },
+  notLoggedInTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 8,
     textAlign: 'center',
+  },
+  notLoggedInText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 20,
   },
   loginButton: {
     backgroundColor: '#000',
-    paddingHorizontal: 40,
-    paddingVertical: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
     borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    minWidth: 140,
   },
   loginButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  profileCard: {
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    paddingVertical: 30,
-    paddingHorizontal: 20,
-    marginTop: 0,
-    marginHorizontal: 16,
-    borderRadius: 16,
-    boxShadow: '0 4px 8px rgba(0,0,0,0.08)',
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 4,
+    fontWeight: '600',
     textAlign: 'center',
   },
-  userEmail: {
+  // Welcome styles for non-logged in users
+  welcomeIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+  },
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  // Login prompt styles
+  loginPromptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 8,
+  },
+  loginPromptIcon: {
+    marginRight: 16,
+  },
+  loginPromptContent: {
+    flex: 1,
+  },
+  loginPromptTitle: {
     fontSize: 16,
-    color: '#666',
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  loginPromptSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 16,
+  },
+  // Authentication button styles
+  loginButtonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366f1',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 8,
+  },
+  loginButtonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  loginButtonContent: {
+    flex: 1,
+  },
+  loginButtonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  loginButtonSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  signupButtonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10b981',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 8,
+  },
+  signupButtonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  signupButtonContent: {
+    flex: 1,
+  },
+  signupButtonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  signupButtonSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  // Minimalist Profile Header - Removed profile pic and email, kept role badge
+  profileHeader: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  profileInfo: {
+    alignItems: 'center',
+  },
+  userName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1e293b',
     marginBottom: 12,
     textAlign: 'center',
   },
-  adminBadge: {
+  // Restored Role Badge Styles
+  roleBadgeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#6200ee',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
   },
-  adminBadgeText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginLeft: 6,
+  adminBadge: {
+    backgroundColor: '#6366f1',
   },
   customerBadge: {
+    backgroundColor: '#3b82f6',
+  },
+  roleBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  editProfileButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2196F3',
+    backgroundColor: '#f8fafc',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    marginTop: 8,
+    gap: 6,
   },
-  customerBadgeText: {
-    color: '#fff',
+  editProfileText: {
+    color: '#6366f1',
     fontSize: 14,
-    fontWeight: 'bold',
-    marginLeft: 6,
+    fontWeight: '600',
   },
   section: {
-    marginTop: 24,
-    paddingHorizontal: 16,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingLeft: 4,
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-    paddingLeft: 4,
-    marginBottom: 12,
+    fontWeight: '700',
+    color: '#1e293b',
   },
+  refreshButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+  },
+  // Modern Minimalist Stats Grid - Updated
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   statCard: {
-    flex: 1,
-    minWidth: '47%',
-    padding: 20,
+    width: (width - 56) / 2,
+    backgroundColor: '#fff',
+    padding: 16,
     borderRadius: 16,
     alignItems: 'center',
-    boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
-  statIcon: {
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 8,
   },
   statValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 12,
+    color: '#64748b',
     textAlign: 'center',
+    fontWeight: '500',
   },
   statsLoadingContainer: {
-    padding: 40,
+    padding: 30,
     alignItems: 'center',
   },
-  statsErrorContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  statsErrorText: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: '#6200ee',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  quickActionsContainer: {
-    marginTop: 8,
+  // Modern Minimalist Quick Actions - Updated
+  quickActions: {
+    marginBottom: 8,
   },
   quickActionsTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#000',
+    color: '#64748b',
     marginBottom: 12,
-    paddingLeft: 4,
   },
-  optionCard: {
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  actionCard: {
+    width: (width - 56) / 3,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  actionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  actionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1e293b',
+    textAlign: 'center',
+  },
+  // Support Card Styles
+  supportCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+    borderRadius: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
+  supportIconContainer: {
+    width: 44,
+    height: 44,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12,
+  },
+  supportContent: {
+    flex: 1,
+  },
+  supportTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 2,
+  },
+  supportSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  // Keep original styles for other sections
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  optionIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   optionContent: {
     flex: 1,
   },
   optionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#000',
+    color: '#1e293b',
     marginBottom: 2,
   },
   optionSubtitle: {
-    fontSize: 13,
-    color: '#666',
+    fontSize: 12,
+    color: '#64748b',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000',
-    marginHorizontal: 16,
-    marginTop: 24,
+    backgroundColor: '#fef2f2',
+    padding: 14,
+    borderRadius: 14,
     marginBottom: 20,
-    padding: 18,
-    borderRadius: 12,
-    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+    gap: 8,
   },
   logoutButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 12,
+    color: '#ef4444',
+    fontSize: 15,
+    fontWeight: '600',
   },
   footer: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 16,
   },
   footerText: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 11,
+    color: '#94a3b8',
   },
   modalOverlay: {
     flex: 1,
@@ -775,70 +1132,72 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: '#fff',
     borderRadius: 20,
-    padding: 30,
+    padding: 20,
     width: '100%',
-    maxWidth: 350,
+    maxWidth: 300,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   modalIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FFEBEE',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#fef2f2',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
     marginBottom: 12,
   },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 8,
+  },
   modalMessage: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: '#64748b',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    marginBottom: 20,
+    lineHeight: 20,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     width: '100%',
   },
   modalButtonCancel: {
     flex: 1,
-    padding: 16,
+    paddingVertical: 12,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#000',
+    backgroundColor: '#f8fafc',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   modalButtonCancelText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '600',
   },
   modalButtonConfirm: {
     flex: 1,
-    padding: 16,
+    paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#000',
+    backgroundColor: '#ef4444',
     alignItems: 'center',
   },
   modalButtonConfirmText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '600',
   },
   loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },

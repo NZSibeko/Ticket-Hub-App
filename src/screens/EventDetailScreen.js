@@ -25,7 +25,7 @@ const EventDetailScreen = ({ route, navigation }) => {
   const [error, setError] = useState(null);
   const [selectedTicketType, setSelectedTicketType] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const { getAuthHeader } = useAuth();
+  const { user, getAuthHeader } = useAuth();
 
   // Helper function to get available quantity
   const getAvailableQuantity = (ticketType) => {
@@ -114,61 +114,82 @@ const EventDetailScreen = ({ route, navigation }) => {
     setSelectedTicketType(ticketType);
   };
 
-// Replace the handlePurchase function (lines 100-140)
-
-const handlePurchase = () => {
-  if (!selectedTicketType) {
-    Alert.alert('Select Ticket', 'Please select a ticket type before purchasing.');
-    return;
-  }
-
-  const available = getAvailableQuantity(selectedTicketType);
-  
-  if (available <= 0) {
-    Alert.alert('Sold Out', 'This ticket type is sold out. Please select another one.');
-    return;
-  }
-
-  console.log('🎫 Navigating to PurchaseTicket with:', {
-    eventId: event.event_id,
-    eventName: event.event_name,
-    ticketType: selectedTicketType.type,
-    availableQuantity: available,
-  });
-
-  try {
-    // Method 1: Try direct navigation (should work since both are at Stack level)
-    navigation.navigate('PurchaseTicket', {
-      eventId: event.event_id,
-      event: event,
-      ticketType: selectedTicketType,
-    });
-    console.log('✅ Navigation successful');
-  } catch (error) {
-    console.error('❌ Direct navigation failed:', error);
-    
-    // Method 2: Try parent navigator as fallback
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('PurchaseTicket', {
-          eventId: event.event_id,
-          event: event,
-          ticketType: selectedTicketType,
-        });
-        console.log('✅ Parent navigation successful');
-      } else {
-        throw new Error('No parent navigator found');
-      }
-    } catch (parentError) {
-      console.error('❌ Parent navigation failed:', parentError);
-      Alert.alert(
-        'Navigation Error', 
-        'Unable to open ticket purchase screen. Please try again or contact support.'
-      );
+  const handlePurchase = () => {
+    if (!selectedTicketType) {
+      Alert.alert('Select Ticket', 'Please select a ticket type before purchasing.');
+      return;
     }
-  }
-};
+
+    const available = getAvailableQuantity(selectedTicketType);
+    
+    if (available <= 0) {
+      Alert.alert('Sold Out', 'This ticket type is sold out. Please select another one.');
+      return;
+    }
+
+    // Check if user is logged in
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please log in to purchase tickets for this event',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Log In',
+            onPress: () => navigation.navigate('Login')
+          },
+          {
+            text: 'Create Account',
+            onPress: () => navigation.navigate('Registration')
+          }
+        ]
+      );
+      return;
+    }
+
+    console.log('🎫 Navigating to PurchaseTicket with:', {
+      eventId: event.event_id,
+      eventName: event.event_name,
+      ticketType: selectedTicketType.type,
+      availableQuantity: available,
+    });
+
+    try {
+      // Method 1: Try direct navigation (should work since both are at Stack level)
+      navigation.navigate('PurchaseTicket', {
+        eventId: event.event_id,
+        event: event,
+        ticketType: selectedTicketType,
+      });
+      console.log('✅ Navigation successful');
+    } catch (error) {
+      console.error('❌ Direct navigation failed:', error);
+      
+      // Method 2: Try parent navigator as fallback
+      try {
+        const parent = navigation.getParent();
+        if (parent) {
+          parent.navigate('PurchaseTicket', {
+            eventId: event.event_id,
+            event: event,
+            ticketType: selectedTicketType,
+          });
+          console.log('✅ Parent navigation successful');
+        } else {
+          throw new Error('No parent navigator found');
+        }
+      } catch (parentError) {
+        console.error('❌ Parent navigation failed:', parentError);
+        Alert.alert(
+          'Navigation Error', 
+          'Unable to open ticket purchase screen. Please try again or contact support.'
+        );
+      }
+    }
+  };
 
   const formatDate = (dateString) => {
     try {

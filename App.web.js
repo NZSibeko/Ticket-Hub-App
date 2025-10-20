@@ -4,24 +4,24 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { AuthProvider } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 // Import screens directly
-import AdminDashboard from './src/screens/AdminDashboard';
-import CreateEventScreen from './src/screens/CreateEventScreen';
+import AdminDashboard from './src/screens/AdminDashboardScreen.web';
+import CreateEventScreen from './src/screens/CreateEventScreen.web';
 import EventDetailScreen from './src/screens/EventDetailScreen';
 import EventManagementScreen from './src/screens/EventManagementScreen';
 import HomeScreen from './src/screens/HomeScreen.web';
 import LoginScreen from './src/screens/LoginScreen';
 import MyTicketsScreen from './src/screens/MyTicketsScreen.web';
 import PaymentScreen from './src/screens/PaymentScreen';
+import PaymentSuccess from './src/screens/PaymentSuccessScreen.web';
 import ProfileScreen from './src/screens/ProfileScreen.web';
 import RegistrationScreen from './src/screens/RegistrationScreen';
-import ScannerScreen from './src/screens/ScannerScreen';
+import ScannerScreen from './src/screens/ScannerScreen.web';
 import SearchEventsScreen from './src/screens/SearchEventsScreen.web';
-import SplashScreen from './src/screens/SplashScreen';
 import TicketPurchaseScreen from './src/screens/TicketPurchaseScreen';
-import UserManagementScreen from './src/screens/UserManagementScreen';
+import UserManagementScreen from './src/screens/UserManagementScreen.web';
 
 const Stack = createStackNavigator();
 const TopTab = createMaterialTopTabNavigator();
@@ -158,96 +158,112 @@ const AdminTabs = React.memo(() => {
   );
 });
 
+// Root Navigator Component
+const RootNavigator = () => {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6366f1" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator 
+      initialRouteName="Home" // Start directly with Home instead of Splash
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#f8f9fa' },
+      }}
+    >
+      {/* Auth Screens */}
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Registration" component={RegistrationScreen} />
+      
+      {/* Main App Tab Screens */}
+      <Stack.Screen 
+        name="Home" 
+        component={user?.role === 'customer' || !user ? MainTabs : AdminTabs}
+        options={{ headerShown: false }}
+      />
+      
+      {/* Modal/Detail Screens - These are at the Stack level and accessible from anywhere */}
+      <Stack.Screen 
+        name="EventDetail" 
+        component={EventDetailScreen}
+        options={{
+          presentation: 'card',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="PurchaseTicket" 
+        component={TicketPurchaseScreen}
+        options={{
+          presentation: 'card',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="Payment" 
+        component={PaymentScreen}
+        options={{
+          presentation: 'card',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="PaymentSuccess" 
+        component={PaymentSuccess} 
+      />
+      <Stack.Screen 
+        name="MyTickets" 
+        component={MyTicketsScreen}
+        options={{
+          presentation: 'card',
+          headerShown: false,
+        }}
+      />
+      
+      {/* Admin Screens */}
+      <Stack.Screen 
+        name="AdminDashboard" 
+        component={AdminDashboard}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="CreateEvent" 
+        component={CreateEventScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="EventManagement" 
+        component={EventManagementScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Scanner" 
+        component={ScannerScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="UserManagement" 
+        component={UserManagementScreen}
+        options={{ headerShown: false }}
+      />
+    </Stack.Navigator>
+  );
+};
+
 export default function App() {
   return (
     <AuthProvider>
       <View style={styles.container}>
         <NavigationContainer>
-          <Stack.Navigator 
-            initialRouteName="Splash"
-            screenOptions={{
-              headerShown: false,
-              cardStyle: { backgroundColor: '#f8f9fa' },
-            }}
-          >
-            {/* Auth Screens */}
-            <Stack.Screen name="Splash" component={SplashScreen} />
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Registration" component={RegistrationScreen} />
-            
-            {/* Main App Tab Screens */}
-            <Stack.Screen 
-              name="Home" 
-              component={MainTabs}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen 
-              name="AdminHome" 
-              component={AdminTabs}
-              options={{ headerShown: false }}
-            />
-            
-            {/* Modal/Detail Screens - These are at the Stack level and accessible from anywhere */}
-            <Stack.Screen 
-              name="EventDetail" 
-              component={EventDetailScreen}
-              options={{
-                presentation: 'card',
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen 
-              name="PurchaseTicket" 
-              component={TicketPurchaseScreen}
-              options={{
-                presentation: 'card',
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen 
-              name="Payment" 
-              component={PaymentScreen}
-              options={{
-                presentation: 'card',
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen 
-              name="MyTickets" 
-              component={MyTicketsScreen}
-              options={{
-                presentation: 'card',
-                headerShown: false,
-              }}
-            />
-            
-            {/* Admin Screens */}
-            <Stack.Screen 
-              name="AdminDashboard" 
-              component={AdminDashboard}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen 
-              name="CreateEvent" 
-              component={CreateEventScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen 
-              name="EventManagement" 
-              component={EventManagementScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen 
-              name="Scanner" 
-              component={ScannerScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen 
-              name="UserManagement" 
-              component={UserManagementScreen}
-              options={{ headerShown: false }}
-            />
-          </Stack.Navigator>
+          <RootNavigator />
         </NavigationContainer>
       </View>
     </AuthProvider>

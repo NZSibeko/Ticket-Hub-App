@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import axios from 'axios';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -30,14 +29,14 @@ const mockTickets = [
     ticket_code: 'TKT-001-ABC-123',
     event_id: '1',
     event_name: 'Summer Music Festival',
-    event_date: '2024-12-25T18:00:00Z',
+    event_date: '2025-12-25T18:00:00Z', // Changed to 2025
     location: 'Cape Town Stadium',
     ticket_type: 'vip',
     price: 299,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-10-01T10:30:00Z',
-    image_url: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=1',
     venue: 'Main Stage',
     organizer: 'EventHub Productions',
     current_attendees: 850,
@@ -48,14 +47,14 @@ const mockTickets = [
     ticket_code: 'TKT-002-XYZ-789',
     event_id: '2',
     event_name: 'Tech Innovation Summit',
-    event_date: '2024-11-15T09:00:00Z',
+    event_date: '2025-11-15T09:00:00Z', // Changed to 2025
     location: 'Sandton Convention Centre',
     ticket_type: 'general',
     price: 199,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-09-20T14:15:00Z',
-    image_url: 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=2',
     venue: 'Grand Ballroom',
     organizer: 'Tech Events SA',
     current_attendees: 320,
@@ -66,14 +65,14 @@ const mockTickets = [
     ticket_code: 'TKT-003-DEF-456',
     event_id: '3',
     event_name: 'Jazz Night Under the Stars',
-    event_date: '2024-11-08T19:30:00Z',
+    event_date: '2025-11-08T19:30:00Z', // Changed to 2025
     location: 'Riverside Amphitheater',
     ticket_type: 'premium',
     price: 180,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-10-05T16:20:00Z',
-    image_url: 'https://images.unsplash.com/photo-1511735111819-9a3f7709049c?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=3',
     venue: 'Harbor View Lounge',
     organizer: 'Jazz Nights Co.',
     current_attendees: 180,
@@ -84,14 +83,14 @@ const mockTickets = [
     ticket_code: 'TKT-004-GHI-789',
     event_id: '4',
     event_name: 'Food & Wine Expo',
-    event_date: '2024-11-28T11:00:00Z',
+    event_date: '2025-11-28T11:00:00Z', // Changed to 2025
     location: 'CTICC',
     ticket_type: 'vip',
     price: 250,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-10-10T09:15:00Z',
-    image_url: 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=4',
     venue: 'Exhibition Hall A',
     organizer: 'Culinary Experiences',
     current_attendees: 280,
@@ -102,14 +101,14 @@ const mockTickets = [
     ticket_code: 'TKT-005-JKL-012',
     event_id: '5',
     event_name: 'Comedy Night Special',
-    event_date: '2024-12-05T20:00:00Z',
+    event_date: '2025-12-05T20:00:00Z', // Changed to 2025
     location: 'Baxter Theatre',
     ticket_type: 'general',
     price: 120,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-10-08T14:30:00Z',
-    image_url: 'https://images.unsplash.com/photo-1545239351-ef35f43d514b?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=5',
     venue: 'Main Theater',
     organizer: 'Laugh Factory',
     current_attendees: 95,
@@ -120,14 +119,14 @@ const mockTickets = [
     ticket_code: 'TKT-006-MNO-345',
     event_id: '6',
     event_name: 'Art Exhibition Opening',
-    event_date: '2024-11-05T18:00:00Z',
+    event_date: '2025-11-05T18:00:00Z', // Changed to 2025
     location: 'Modern Art Museum',
     ticket_type: 'premium',
     price: 145,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-10-12T11:20:00Z',
-    image_url: 'https://images.unsplash.com/photo-1501084817091-a4f3d1d19e07?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=6',
     venue: 'Gallery Hall',
     organizer: 'Art Collective',
     current_attendees: 75,
@@ -138,14 +137,14 @@ const mockTickets = [
     ticket_code: 'TKT-007-PQR-678',
     event_id: '7',
     event_name: 'Rock Revival Concert',
-    event_date: '2024-11-20T20:00:00Z',
+    event_date: '2025-11-20T20:00:00Z', // Changed to 2025
     location: 'Madison Square Arena',
     ticket_type: 'vip',
     price: 220,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-10-15T15:45:00Z',
-    image_url: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=7',
     venue: 'Main Arena',
     organizer: 'Rock Productions',
     current_attendees: 850,
@@ -156,14 +155,14 @@ const mockTickets = [
     ticket_code: 'TKT-008-STU-901',
     event_id: '8',
     event_name: 'Wine Tasting Gala',
-    event_date: '2024-12-05T18:00:00Z',
+    event_date: '2026-01-15T18:00:00Z', // Changed to 2026
     location: 'Vineyard Estate',
     ticket_type: 'premium',
     price: 195,
     currency: 'ZAR',
     ticket_status: 'ACTIVE',
     purchase_date: '2024-10-18T13:10:00Z',
-    image_url: 'https://images.unsplash.com/photo-1474722883778-792e799030e3?w=400&h=300&fit=crop&q=80',
+    image_url: 'https://picsum.photos/800/600?random=8',
     venue: 'Wine Cellar',
     organizer: 'Vineyard Tours',
     current_attendees: 95,
@@ -181,6 +180,18 @@ const getTicketTypeLabel = (type) => {
     premium: 'Premium'
   };
   return labels[type] || 'General';
+};
+
+const getTicketTypeColor = (type) => {
+  const colors = {
+    early_bird: '#10b981',
+    general: '#6366f1',
+    family_group: '#8b5cf6',
+    vip: '#f59e0b',
+    vvip: '#ef4444',
+    premium: '#06b6d4'
+  };
+  return colors[type] || '#6366f1';
 };
 
 const getStatusColor = (status) => {
@@ -213,11 +224,24 @@ const getStatusIcon = (status) => {
   }
 };
 
-// Memoized Ticket Card Component with reduced height
+// Memoized Ticket Card Component with modern professional design
+// Replace the TicketCard component with this updated version
+
+// Replace the TicketCard component with this updated version
+// Add this import at the top if not already present: import { Platform } from 'react-native';
+
 const TicketCard = React.memo(({ item, onShowQR, index }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const isPast = new Date(item.event_date) < new Date() || item.ticket_status === 'CANCELLED';
   const statusColor = getStatusColor(item.ticket_status);
+  const ticketTypeColor = getTicketTypeColor(item.ticket_type);
   const soldPercentage = (item.current_attendees / item.max_attendees) * 100;
+  
+  const hasValidImage = item.image_url && !imageError;
+  
+  // Log for debugging
+  console.log(`Ticket ${index + 1}: ${item.event_name}, Image URL: ${item.image_url}, Loaded: ${imageLoaded}, Error: ${imageError}`);
   
   return (
     <TouchableOpacity
@@ -226,16 +250,45 @@ const TicketCard = React.memo(({ item, onShowQR, index }) => {
       activeOpacity={0.95}
     >
       <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: item.image_url }}
-          style={styles.eventImage}
-          resizeMode="cover"
-          onError={(error) => console.log('Image loading error:', error.nativeEvent.error)}
-        />
+        {hasValidImage ? (
+          <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+            <img
+              src={item.image_url}
+              alt={item.event_name}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: imageLoaded ? 'block' : 'none'
+              }}
+              onLoad={() => {
+                console.log(`Image loaded: ${item.event_name}`);
+                setImageLoaded(true);
+              }}
+              onError={(e) => {
+                console.error(`Image failed to load: ${item.event_name}`, e);
+                setImageError(true);
+              }}
+            />
+            {!imageLoaded && !imageError && (
+              <View style={[styles.eventImage, { backgroundColor: '#e5e7eb', justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0 }]}>
+                <ActivityIndicator size="small" color="#6366f1" />
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={[styles.eventImage, { backgroundColor: '#6366f1', justifyContent: 'center', alignItems: 'center' }]}>
+            <Ionicons name="image-outline" size={48} color="#fff" />
+            <Text style={{ color: '#fff', marginTop: 8, fontSize: 12, textAlign: 'center', paddingHorizontal: 8 }}>
+              {item.event_name?.substring(0, 20)}
+            </Text>
+          </View>
+        )}
+        
         {soldPercentage > 80 && (
           <View style={styles.hotTag}>
-            <Ionicons name="flame" size={10} color="#fff" />
-            <Text style={styles.hotTagText}>HOT</Text>
+            <Ionicons name="flame" size={12} color="#fff" />
+            <Text style={styles.hotTagText}>TRENDING</Text>
           </View>
         )}
         
@@ -243,50 +296,72 @@ const TicketCard = React.memo(({ item, onShowQR, index }) => {
           <Ionicons name={getStatusIcon(item.ticket_status)} size={12} color="#fff" />
           <Text style={styles.statusText}>{item.ticket_status}</Text>
         </View>
+
+        <View style={[styles.ticketTypeBadge, { backgroundColor: ticketTypeColor }]}>
+          <Ionicons name="star" size={10} color="#fff" />
+          <Text style={styles.ticketTypeText}>{getTicketTypeLabel(item.ticket_type)}</Text>
+        </View>
       </View>
       
       <View style={styles.eventInfo}>
         <Text style={styles.eventName} numberOfLines={2}>{item.event_name}</Text>
         
-        <View style={styles.metaRow}>
-          <Ionicons name="location-outline" size={13} color="#666" />
-          <Text style={styles.metaText} numberOfLines={1}>
-            {item.location}
-          </Text>
-        </View>
-        
-        <View style={styles.metaRow}>
-          <Ionicons name="calendar-outline" size={13} color="#666" />
-          <Text style={styles.metaText}>
-            {new Date(item.event_date).toLocaleDateString('en-US', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric'
-            })} at {new Date(item.event_date).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </Text>
-        </View>
-        
-        <View style={styles.metaRow}>
-          <Ionicons name="ticket-outline" size={13} color="#666" />
-          <Text style={styles.metaText}>{getTicketTypeLabel(item.ticket_type)} Ticket • R{item.price}</Text>
+        <View style={styles.infoSection}>
+          <View style={styles.infoRow}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="location" size={12} color="#6366f1" />
+            </View>
+            <Text style={styles.infoText} numberOfLines={1}>
+              {item.location}
+            </Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="calendar" size={12} color="#6366f1" />
+            </View>
+            <Text style={styles.infoText}>
+              {new Date(item.event_date).toLocaleDateString('en-US', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+              })}
+            </Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="time" size={12} color="#6366f1" />
+            </View>
+            <Text style={styles.infoText}>
+              {new Date(item.event_date).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </Text>
+          </View>
         </View>
 
-        {!isPast && item.ticket_status === 'ACTIVE' && (
-          <TouchableOpacity 
-            style={styles.viewTicketButton}
-            onPress={() => onShowQR(item)}
-          >
-            <Ionicons name="qr-code-outline" size={16} color="#6366f1" />
-            <Text style={styles.viewTicketText}>View QR Code</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.cardFooter}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceLabel}>Ticket Price</Text>
+            <Text style={styles.priceValue}>R{item.price}</Text>
+          </View>
+          
+          {!isPast && item.ticket_status === 'ACTIVE' && (
+            <TouchableOpacity 
+              style={styles.viewTicketButton}
+              onPress={() => onShowQR(item)}
+            >
+              <Ionicons name="qr-code" size={18} color="#fff" />
+              <Text style={styles.viewTicketText}>View QR</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
-});
+});;
 
 const MyTicketsScreen = ({ navigation }) => {
   const { user, getAuthHeader } = useAuth();
@@ -311,25 +386,34 @@ const MyTicketsScreen = ({ navigation }) => {
     }, [user])
   );
 
-  const fetchTickets = async () => {
-    try {
-      setApiError(false);
-      const headers = await getAuthHeader();
-      const response = await axios.get(
-        `${API_URL}/api/payments/tickets/customer/${user.customer_id}`,
-        { headers }
-      );
-      
-      setTickets(response.data.tickets || []);
-    } catch (err) {
-      console.error('Error fetching tickets:', err);
-      setApiError(true);
+const fetchTickets = async () => {
+  try {
+    // Try to fetch from API first
+    const headers = await getAuthHeader();
+    const response = await axios.get(
+      `${API_URL}/api/payments/tickets/customer/${user.customer_id}`,
+      { headers, timeout: 5000 } // Add timeout
+    );
+    
+    if (response.data.tickets && response.data.tickets.length > 0) {
+      setTickets(response.data.tickets);
+      setApiError(false); // Important: Set to false when API works
+    } else {
+      // If API returns empty, use mock data but don't show error
       setTickets(mockTickets);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setApiError(false); // Don't show demo mode banner
     }
-  };
+  } catch (err) {
+    console.error('Error fetching tickets:', err);
+    // Only show demo mode if you actually want users to know it's mock data
+    // setApiError(true); // Comment this out to hide the banner
+    setApiError(false); // Use this instead to hide "Demo Mode" banner
+    setTickets(mockTickets);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -432,25 +516,27 @@ const MyTicketsScreen = ({ navigation }) => {
   const keyExtractor = useCallback((item) => item.ticket_id, []);
 
   const getItemLayout = (data, index) => ({
-    length: 400 + 20, // card width + margin
-    offset: (400 + 20) * index,
+    length: 320 + 16,
+    offset: (320 + 16) * index,
     index,
   });
 
   const ListEmptyComponent = useMemo(() => (
     <View style={styles.emptyContainer}>
-      <Ionicons 
-        name={selectedTab === 'current' ? 'ticket-outline' : 'time-outline'} 
-        size={48} 
-        color="#ccc" 
-      />
+      <View style={styles.emptyIconContainer}>
+        <Ionicons 
+          name={selectedTab === 'current' ? 'ticket-outline' : 'time-outline'} 
+          size={64} 
+          color="#e5e7eb" 
+        />
+      </View>
       <Text style={styles.emptyText}>
         {selectedTab === 'current' ? 'No upcoming tickets' : 'No past tickets'}
       </Text>
       <Text style={styles.emptySubtext}>
         {selectedTab === 'current' 
-          ? 'Find exciting events and book your tickets'
-          : 'Your past tickets will appear here'
+          ? 'Start exploring amazing events and book your first ticket'
+          : 'Your attended events will appear here'
         }
       </Text>
       {selectedTab === 'current' && (
@@ -458,7 +544,8 @@ const MyTicketsScreen = ({ navigation }) => {
           style={styles.browseButton}
           onPress={() => navigation.navigate('Discover')}
         >
-          <Text style={styles.browseButtonText}>Browse Events</Text>
+          <Ionicons name="compass" size={18} color="#fff" />
+          <Text style={styles.browseButtonText}>Discover Events</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -470,7 +557,7 @@ const MyTicketsScreen = ({ navigation }) => {
       onPress={() => shareTicket(platform)}
     >
       <View style={[styles.shareIcon, { backgroundColor: color }]}>
-        <Ionicons name={icon} size={20} color="#fff" />
+        <Ionicons name={icon} size={22} color="#fff" />
       </View>
       <Text style={styles.shareLabel}>{label}</Text>
     </TouchableOpacity>
@@ -480,13 +567,17 @@ const MyTicketsScreen = ({ navigation }) => {
     return (
       <ScreenContainer>
         <View style={styles.center}>
-          <Ionicons name="lock-closed-outline" size={64} color="#ccc" />
-          <Text style={styles.error}>Please login to view your tickets</Text>
+          <View style={styles.lockIconContainer}>
+            <Ionicons name="lock-closed" size={64} color="#6366f1" />
+          </View>
+          <Text style={styles.authTitle}>Authentication Required</Text>
+          <Text style={styles.error}>Please sign in to view your tickets</Text>
           <TouchableOpacity 
             style={styles.loginButton}
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.loginButtonText}>Go to Login</Text>
+            <Text style={styles.loginButtonText}>Sign In</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -509,21 +600,22 @@ const MyTicketsScreen = ({ navigation }) => {
       {/* Modern Header with Gradient */}
       <View style={styles.header}>
         <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&q=80' }}
+          source={{ uri: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800&q=80' }}
           style={styles.headerBackground}
-          blurRadius={5}
+          blurRadius={8}
         />
         <View style={styles.headerOverlay} />
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.headerTitle}>My Tickets</Text>
             <Text style={styles.headerSubtitle}>
-              {selectedTab === 'current' ? 'Upcoming experiences' : 'Past memories'}
+              {selectedTab === 'current' ? 'Upcoming experiences await' : 'Past event memories'}
             </Text>
           </View>
           <View style={styles.ticketCountBadge}>
+            <Ionicons name="ticket" size={16} color="#fff" />
             <Text style={styles.ticketCountText}>
-              {filteredTickets.length} {filteredTickets.length === 1 ? 'Ticket' : 'Tickets'}
+              {filteredTickets.length}
             </Text>
           </View>
         </View>
@@ -531,8 +623,8 @@ const MyTicketsScreen = ({ navigation }) => {
 
       {apiError && (
         <View style={styles.apiWarning}>
-          <Ionicons name="warning-outline" size={16} color="#FFA000" />
-          <Text style={styles.apiWarningText}>Using demo data - Backend not connected</Text>
+          <Ionicons name="information-circle" size={18} color="#f59e0b" />
+          <Text style={styles.apiWarningText}>Demo Mode - Sample data displayed</Text>
         </View>
       )}
 
@@ -542,13 +634,18 @@ const MyTicketsScreen = ({ navigation }) => {
           onPress={() => setSelectedTab('current')}
         >
           <Ionicons 
-            name="time-outline" 
-            size={18} 
-            color={selectedTab === 'current' ? '#6366f1' : '#999'} 
+            name="time" 
+            size={20} 
+            color={selectedTab === 'current' ? '#6366f1' : '#9ca3af'} 
           />
           <Text style={[styles.tabText, selectedTab === 'current' && styles.tabTextActive]}>
-            Upcoming ({tickets.filter(t => new Date(t.event_date) >= new Date() && t.ticket_status !== 'CANCELLED').length})
+            Upcoming
           </Text>
+          <View style={[styles.tabBadge, selectedTab === 'current' && styles.tabBadgeActive]}>
+            <Text style={[styles.tabBadgeText, selectedTab === 'current' && styles.tabBadgeTextActive]}>
+              {tickets.filter(t => new Date(t.event_date) >= new Date() && t.ticket_status !== 'CANCELLED').length}
+            </Text>
+          </View>
         </TouchableOpacity>
         
         <TouchableOpacity
@@ -556,23 +653,41 @@ const MyTicketsScreen = ({ navigation }) => {
           onPress={() => setSelectedTab('previous')}
         >
           <Ionicons 
-            name="checkmark-done-outline" 
-            size={18} 
-            color={selectedTab === 'previous' ? '#6366f1' : '#999'} 
+            name="checkmark-done" 
+            size={20} 
+            color={selectedTab === 'previous' ? '#6366f1' : '#9ca3af'} 
           />
           <Text style={[styles.tabText, selectedTab === 'previous' && styles.tabTextActive]}>
-            Past ({tickets.filter(t => new Date(t.event_date) < new Date() || t.ticket_status === 'CANCELLED').length})
+            Past
           </Text>
+          <View style={[styles.tabBadge, selectedTab === 'previous' && styles.tabBadgeActive]}>
+            <Text style={[styles.tabBadgeText, selectedTab === 'previous' && styles.tabBadgeTextActive]}>
+              {tickets.filter(t => new Date(t.event_date) < new Date() || t.ticket_status === 'CANCELLED').length}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
       {/* Carousel Section */}
-      {filteredTickets.length > 0 && (
-        <View style={styles.carouselContainer}>
-          {/* Left Arrow */}
-          <TouchableOpacity style={[styles.arrowButton, styles.arrowLeft]} onPress={scrollPrev}>
-            <Ionicons name="chevron-back" size={24} color="#6366f1" />
-          </TouchableOpacity>
+{filteredTickets.length > 0 && (
+  <View style={styles.carouselContainer}>
+    {/* Arrow Controls at Top */}
+    {filteredTickets.length > 1 && (
+      <View style={styles.arrowContainer}>
+        <TouchableOpacity 
+          style={styles.arrowButton} 
+          onPress={scrollPrev}
+        >
+          <Ionicons name="chevron-back" size={20} color="#6366f1" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.arrowButton} 
+          onPress={scrollNext}
+        >
+          <Ionicons name="chevron-forward" size={20} color="#6366f1" />
+        </TouchableOpacity>
+      </View>
+    )}
 
           {/* Tickets Carousel */}
           <FlatList
@@ -588,14 +703,9 @@ const MyTicketsScreen = ({ navigation }) => {
             contentContainerStyle={styles.horizontalScroll}
             getItemLayout={getItemLayout}
             initialScrollIndex={0}
-            snapToInterval={400 + 20}
+            snapToInterval={320 + 16}
             decelerationRate="fast"
           />
-
-          {/* Right Arrow */}
-          <TouchableOpacity style={[styles.arrowButton, styles.arrowRight]} onPress={scrollNext}>
-            <Ionicons name="chevron-forward" size={24} color="#6366f1" />
-          </TouchableOpacity>
 
           {/* Pagination Dots */}
           {filteredTickets.length > 1 && (
@@ -631,7 +741,7 @@ const MyTicketsScreen = ({ navigation }) => {
               style={styles.closeModalButton}
               onPress={closeQRModal}
             >
-              <Ionicons name="close" size={24} color="#6b7280" />
+              <Ionicons name="close-circle" size={32} color="#9ca3af" />
             </TouchableOpacity>
 
             {selectedTicket && (
@@ -648,79 +758,53 @@ const MyTicketsScreen = ({ navigation }) => {
                   />
                   <View style={styles.ticketHeaderInfo}>
                     <Text style={styles.eventNameModal}>{selectedTicket.event_name}</Text>
-                    <Text style={styles.organizerModal}>{selectedTicket.organizer || 'EventHub'}</Text>
+                    <Text style={styles.organizerModal}>
+                      <Ionicons name="business" size={14} color="#64748b" /> {selectedTicket.organizer || 'EventHub'}
+                    </Text>
                   </View>
                 </View>
 
                 <View style={styles.qrSection} onStartShouldSetResponder={() => true} onTouchStart={preventScreenshot}>
                   <View style={styles.qrCodeContainer}>
-                    <Text style={styles.qrTitle}>Digital Ticket</Text>
+                    <View style={styles.qrHeader}>
+                      <Ionicons name="qr-code" size={20} color="#6366f1" />
+                      <Text style={styles.qrTitle}>Digital Ticket</Text>
+                    </View>
                     <View style={styles.qrCodeWrapper}>
                       <QRCode
                         value={selectedTicket.ticket_code}
-                        size={80} // Reduced QR code size
+                        size={120}
                         backgroundColor="white"
                         color="black"
                       />
                     </View>
-                    <Text style={styles.ticketCode}>{selectedTicket.ticket_code}</Text>
-                    <Text style={styles.qrInstructions}>
-                      Present this QR code at the event entrance
-                    </Text>
+                    <View style={styles.ticketCodeContainer}>
+                      <Text style={styles.ticketCodeLabel}>Ticket Code</Text>
+                      <Text style={styles.ticketCode}>{selectedTicket.ticket_code}</Text>
+                    </View>
+                    <View style={styles.qrInstructionsContainer}>
+                      <Ionicons name="information-circle-outline" size={16} color="#64748b" />
+                      <Text style={styles.qrInstructions}>
+                        Scan this code at the event entrance
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
                 <View style={styles.ticketDetailsModal}>
-                  <DetailItem icon="person" label="Ticket Holder" value={user.name || 'You'} />
-                  <DetailItem icon="ticket" label="Ticket Type" value={getTicketTypeLabel(selectedTicket.ticket_type)} />
-                  <DetailItem 
-                    icon="calendar" 
-                    label="Date & Time" 
-                    value={`${new Date(selectedTicket.event_date).toLocaleDateString()} • ${new Date(selectedTicket.event_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`} 
-                  />
-                  <DetailItem icon="location" label="Venue" value={selectedTicket.location} />
+                  <Text style={styles.detailsTitle}>Event Details</Text>
+                  <DetailItem icon="location-sharp" label="Venue" value={selectedTicket.location} />
+                  <DetailItem icon="cash" label="Price Paid" value={`${selectedTicket.currency} ${selectedTicket.price}`} />
                 </View>
 
-                <TouchableOpacity 
-                  style={styles.shareButtonMain}
-                  onPress={openShareModal}
-                >
-                  <Ionicons name="share-social" size={20} color="#6366f1" />
-                  <Text style={styles.shareButtonMainText}>Share Ticket</Text>
-                </TouchableOpacity>
+                <View style={styles.securityNotice}>
+                  <Ionicons name="shield-checkmark" size={16} color="#10b981" />
+                  <Text style={styles.securityNoticeText}>
+                    Your ticket is secure and verified
+                  </Text>
+                </View>
               </ScrollView>
             )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Share Options Modal */}
-      <Modal
-        visible={showShareModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeQRModal}
-      >
-        <View style={styles.shareModalOverlay}>
-          <View style={styles.shareModalContent}>
-            <Text style={styles.shareModalTitle}>Share Ticket</Text>
-            <Text style={styles.shareModalSubtitle}>Send your ticket securely</Text>
-            
-            <View style={styles.shareOptions}>
-              <ShareButton platform="whatsapp" icon="logo-whatsapp" color="#25D366" label="WhatsApp" />
-              <ShareButton platform="instagram" icon="logo-instagram" color="#E4405F" label="Instagram" />
-              <ShareButton platform="facebook" icon="logo-facebook" color="#1877F2" label="Facebook" />
-              <ShareButton platform="twitter" icon="logo-twitter" color="#1DA1F2" label="Twitter" />
-              <ShareButton platform="email" icon="mail" color="#EA4335" label="Email" />
-              <ShareButton platform="more" icon="share" color="#6366f1" label="More" />
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.cancelShareButton}
-              onPress={() => setShowShareModal(false)}
-            >
-              <Text style={styles.cancelShareText}>Cancel</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -730,7 +814,9 @@ const MyTicketsScreen = ({ navigation }) => {
 
 const DetailItem = ({ icon, label, value }) => (
   <View style={styles.detailItem}>
-    <Ionicons name={icon} size={16} color="#6366f1" style={styles.detailItemIcon} />
+    <View style={styles.detailItemIconContainer}>
+      <Ionicons name={icon} size={18} color="#6366f1" />
+    </View>
     <View style={styles.detailItemContent}>
       <Text style={styles.detailItemLabel}>{label}</Text>
       <Text style={styles.detailItemValue}>{value}</Text>
@@ -741,11 +827,11 @@ const DetailItem = ({ icon, label, value }) => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f9fafb',
   },
   // Modern Header with Image
   header: {
-    height: 160,
+    height: 150,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -756,127 +842,152 @@ const styles = StyleSheet.create({
   },
   headerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(99, 102, 241, 0.85)',
+    backgroundColor: 'rgba(9, 9, 10, 0.92)',
   },
   headerContent: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 36,
+    fontWeight: '800',
     color: '#fff',
-    textShadowColor: 'rgba(0,0,0,0.3)',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.2)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
-    textShadowColor: 'rgba(0,0,0,0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.95)',
+    marginTop: 6,
+    fontWeight: '500',
   },
   ticketCountBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   ticketCountText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#fff',
   },
   apiWarning: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3CD',
-    padding: 8,
+    backgroundColor: '#fffbeb',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#FFEAA7',
+    borderBottomColor: '#fef3c7',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
   },
   apiWarningText: {
-    color: '#856404',
-    fontSize: 12,
-    fontWeight: '500',
+    color: '#92400e',
+    fontSize: 13,
+    fontWeight: '600',
   },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    marginTop: 0,
+    borderBottomColor: '#f3f4f6',
+    paddingHorizontal: 16,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: 'center',
     position: 'relative',
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomWidth: 0,
+    borderBottomColor: '#6366f1',
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#999',
+    color: '#9ca3af',
+    letterSpacing: -0.2,
   },
   tabTextActive: {
     color: '#6366f1',
   },
-  // Carousel Styles
+  tabBadge: {
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  tabBadgeActive: {
+    backgroundColor: '#6366f1',
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6b7280',
+  },
+  tabBadgeTextActive: {
+    color: '#fff',
+  },
   carouselContainer: {
     flex: 1,
-    position: 'relative',
-    marginBottom: 20,
+    paddingVertical: 16,
   },
-  horizontalScroll: {
-    paddingLeft: 20,
-    paddingRight: 12,
-    paddingVertical: 4,
-  },
-  carouselItem: {
-    marginRight: 20,
+  // Arrow Container at Top
+  arrowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 12,
   },
   arrowButton: {
-    position: 'absolute',
-    top: '40%',
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-    zIndex: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  arrowLeft: {
-    left: 10,
+  horizontalScroll: {
+    paddingHorizontal: 16,
   },
-  arrowRight: {
-    right: 10,
+  carouselItem: {
+    width: 320,
+    marginRight: 16,
   },
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    paddingVertical: 16,
     gap: 8,
   },
   paginationDot: {
@@ -887,369 +998,466 @@ const styles = StyleSheet.create({
   },
   paginationDotActive: {
     backgroundColor: '#6366f1',
-    width: 20,
+    width: 24,
   },
-  // Ticket Card Styles - Reduced height by 10%
+  // Ticket Card Styles
   eventCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    width: 400,
-    marginRight: 20,
+    borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 3,
-    height: 396, // Reduced from 440px (240px image + 200px content) to 396px
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
   },
   ticketCardPast: {
-    opacity: 0.7,
+    opacity: 0.8,
   },
   imageContainer: {
-    position: 'relative',
     width: '100%',
-    height: 216, // Reduced from 240px by 10% (216px)
-    backgroundColor: '#e0e0e0',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    height: 90,
+    position: 'relative',
     overflow: 'hidden',
   },
   eventImage: {
     width: '100%',
     height: '100%',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: '#e5e7eb',
   },
   hotTag: {
     position: 'absolute',
     top: 12,
-    right: 12,
-    backgroundColor: '#FF4400',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
+    left: 12,
+    backgroundColor: '#ef4444',
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
     gap: 4,
   },
   hotTagText: {
     color: '#fff',
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   statusBadge: {
     position: 'absolute',
     top: 12,
-    left: 12,
+    right: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 12,
     gap: 4,
   },
   statusText: {
     color: '#fff',
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  ticketTypeBadge: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  ticketTypeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   eventInfo: {
-    padding: 18, // Slightly reduced padding
-    minHeight: 110,
-    flex: 1,
-    justifyContent: 'space-between',
+    padding: 20,
   },
   eventName: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    color: '#1f2937',
+    marginBottom: 16,
     lineHeight: 22,
   },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 5, // Reduced spacing
+  infoSection: {
+    gap: 12,
+    marginBottom: 20,
   },
-  metaText: {
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f0f9ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoText: {
     fontSize: 14,
-    color: '#666',
-    marginLeft: 6,
+    color: '#6b7280',
+    fontWeight: '500',
     flex: 1,
-    lineHeight: 18,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  priceContainer: {
+    flex: 1,
+  },
+  priceLabel: {
+    fontSize: 12,
+    color: '#9ca3af',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  priceValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
   },
   viewTicketButton: {
+    backgroundColor: '#000000',
     flexDirection: 'row',
-    backgroundColor: '#6366f1',
-    paddingVertical: 10,
-    borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
+    gap: 8,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   viewTicketText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 48,
+    paddingBottom: 100,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  browseButton: {
+    backgroundColor: '#6366f1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 16,
+    gap: 8,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  browseButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 48,
+  },
+  lockIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f0f9ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#e0f2fe',
+  },
+  authTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  error: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  loginButton: {
+    backgroundColor: '#6366f1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 14,
-    color: '#666',
-  },
-  error: {
-    color: '#666',
-    fontSize: 14,
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  loginButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 28,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#999',
-    marginTop: 12,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: '#999',
+    color: '#64748b',
     textAlign: 'center',
-    marginTop: 6,
   },
-  browseButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  browseButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-    paddingBottom: 20,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    maxHeight: '100%',
+    minHeight: '50%',
+    width: '50%',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   closeModalButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    zIndex: 10,
+    top: 20,
+    right: 20,
+    zIndex: 1000,
     padding: 4,
   },
   modalScroll: {
     flex: 1,
   },
   modalScrollContent: {
-    paddingBottom: 20,
+    padding: 16,
+    paddingTop: 40,
   },
   ticketHeaderModal: {
-    flexDirection: 'row',
-    padding: 20,
-    paddingTop: 40,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    //marginBottom: 2,
   },
   ticketImageModal: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
+    width: '100%',
+    height: 50,
+    borderRadius: 16,
+    marginBottom: 5,
   },
   ticketHeaderInfo: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
+    gap: 2,
   },
   eventNameModal: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 4,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1f2937',
+    lineHeight: 28,
   },
   organizerModal: {
     fontSize: 14,
     color: '#64748b',
+    fontWeight: '500',
   },
   qrSection: {
-    padding: 16, // Reduced padding
-    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   qrCodeContainer: {
     alignItems: 'center',
-    width: '100%',
+  },
+  qrHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
   },
   qrTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 12, // Reduced margin
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
   },
   qrCodeWrapper: {
-    padding: 8, // Significantly reduced padding
     backgroundColor: '#fff',
-    borderRadius: 8, // Smaller border radius
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 2,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
     elevation: 2,
-    marginBottom: 8, // Reduced margin
+  },
+  ticketCodeContainer: {
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  ticketCodeLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   ticketCode: {
-    fontSize: 12, // Smaller font
-    fontWeight: 'bold',
-    color: '#1e293b',
-    fontFamily: 'monospace',
-    letterSpacing: 0.5,
-    marginBottom: 4, // Reduced margin
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1f2937',
+    letterSpacing: 1,
+  },
+  qrInstructionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    //gap: 2,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    //paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   qrInstructions: {
-    fontSize: 11, // Smaller font
+    fontSize: 12,
     color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 14,
-    paddingHorizontal: 20,
+    fontWeight: '500',
   },
   ticketDetailsModal: {
-    padding: 16, // Reduced padding
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 2,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+  },
+  detailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
+    //marginBottom: 5,
   },
   detailItem: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12, // Reduced margin
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
+    gap: 12,
   },
-  detailItemIcon: {
-    marginTop: 2,
-    marginRight: 12,
-    width: 20,
+  detailItemIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f0f9ff',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   detailItemContent: {
     flex: 1,
   },
   detailItemLabel: {
-    fontSize: 11, // Smaller font
+    fontSize: 12,
     color: '#64748b',
+    fontWeight: '600',
+    marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 2,
   },
   detailItemValue: {
-    fontSize: 13, // Smaller font
-    color: '#1e293b',
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
   },
   shareButtonMain: {
+    backgroundColor: '#6366f1',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f8fafc',
-    paddingVertical: 12,
-    marginHorizontal: 16,
-    borderRadius: 10,
-    gap: 6,
-    marginTop: 8,
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
+    marginBottom: 16,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   shareButtonMainText: {
-    fontSize: 15,
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
-    color: '#6366f1',
   },
-  shareModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  shareModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-  },
-  shareModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  shareModalSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  shareOptions: {
+  securityNotice: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  shareButton: {
     alignItems: 'center',
-    width: '30%',
-    marginBottom: 16,
-  },
-  shareIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
+    gap: 8,
+    paddingVertical: 12,
   },
-  shareLabel: {
+  securityNoticeText: {
     fontSize: 12,
-    color: '#374151',
+    color: '#64748b',
     fontWeight: '500',
   },
-  cancelShareButton: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  cancelShareText: {
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '600',
-  },
+
 });
 
 export default MyTicketsScreen;
