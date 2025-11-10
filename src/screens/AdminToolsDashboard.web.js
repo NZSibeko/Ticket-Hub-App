@@ -522,32 +522,6 @@ const AdminToolsDashboard = () => {
     );
   };
 
-  // Test function to verify modal is working
-  const testModal = () => {
-    setModalTitle('Test Modal');
-    setModalContent(
-      <div className="space-y-4">
-        <div className="text-center">
-          <Icon name="CheckCircle" size={48} color="#10b981" className="mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900">Modal is Working!</h3>
-          <p className="text-gray-600">The modal system is functioning correctly.</p>
-        </div>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <p className="text-sm text-yellow-800">
-            If you're not seeing alert cards, check the console for errors and ensure the adminData is loading properly.
-          </p>
-        </div>
-        <button 
-          onClick={() => setModalOpen(false)}
-          className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          Close Modal
-        </button>
-      </div>
-    );
-    setModalOpen(true);
-  };
-
   // Open modal with user details
   const openUserModal = (user) => {
     setModalTitle('User Details');
@@ -1431,13 +1405,6 @@ const AdminToolsDashboard = () => {
             </div>
             {currentView === 'dashboard' && (
               <div className="flex items-center gap-2">
-                {/* Test Modal Button - Remove in production */}
-                <button
-                  onClick={testModal}
-                  className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                >
-                  Test Modal
-                </button>
                 <div className="hidden sm:flex gap-2 bg-gray-100 p-1 rounded-lg">
                   {['today', 'week', 'month'].map((range) => (
                     <button

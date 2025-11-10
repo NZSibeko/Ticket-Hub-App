@@ -186,7 +186,7 @@ const AdminTabs = () => {
           name="Users" 
           component={UserManagementDashboard}
           options={{ 
-            title: 'Users Analytics',
+            title: 'Users',
             tabBarIcon: ({ color }) => (
               <Ionicons name="people" size={20} color={color} />
             ),

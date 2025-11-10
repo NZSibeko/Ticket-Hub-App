@@ -1386,45 +1386,6 @@ const ProfileScreen = ({ navigation }) => {
             </View>
           </View>
 
-          {/* Quick Actions Section - Only show for Admin/Event Managers */}
-          {hasAdminPrivileges() && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Quick Actions</Text>
-              <ResponsiveContainer isGrid={true}>
-                <ActionCard
-                  icon="analytics"
-                  title="Dashboard"
-                  color="#8b5cf6"
-                  onPress={handleAdminDashboard}
-                />
-                <ActionCard
-                  icon="list"
-                  title="Manage Events"
-                  color="#ef4444"
-                  onPress={handleManageEvents}
-                />
-                <ActionCard
-                  icon="people"
-                  title="Manage Users"
-                  color="#10b981"
-                  onPress={handleManageUsers}
-                />
-                <ActionCard
-                  icon="qr-code"
-                  title="Scanner"
-                  color="#64748b"
-                  onPress={handleScannerNavigation}
-                />
-                <ActionCard
-                  icon="add-circle"
-                  title="Create Event"
-                  color="#6366f1"
-                  onPress={handleCreateEvent}
-                />
-              </ResponsiveContainer>
-            </View>
-          )}
-
           {/* My Account Section - For customers only */}
           {isCustomer() && (
             <View style={styles.section}>
@@ -1571,13 +1532,13 @@ const ProfileScreen = ({ navigation }) => {
             />
           </View>
 
-          {/* Logout Button */}
+          {/* Logout Button - Changed to black */}
           <TouchableOpacity
             style={[styles.logoutButton, { width: getCardWidth() }]}
             onPress={handleLogout}
             disabled={loading}
           >
-            <Ionicons name="log-out-outline" size={scaleFont(16)} color="#ef4444" />
+            <Ionicons name="log-out-outline" size={scaleFont(16)} color="#000" />
             <Text style={styles.logoutButtonText}>Logout</Text>
           </TouchableOpacity>
 
@@ -1597,7 +1558,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: scaleSize(300) }]}>
             <View style={styles.modalIcon}>
-              <Ionicons name="log-out-outline" size={scaleSize(40)} color="#ef4444" />
+              <Ionicons name="log-out-outline" size={scaleSize(40)} color="#000" />
             </View>
             <Text style={styles.modalTitle}>Logout</Text>
             <Text style={styles.modalMessage}>
@@ -2451,21 +2412,20 @@ const styles = StyleSheet.create({
     fontSize: scaleFont(12),
     color: '#64748b',
   },
+  // Logout Button - Changed to black
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fef2f2',
+    backgroundColor: '#000',
     padding: 16,
     borderRadius: 16,
     marginBottom: 20,
     gap: 8,
-    borderWidth: 1,
-    borderColor: '#fee2e2',
     minHeight: 56,
   },
   logoutButtonText: {
-    color: '#ef4444',
+    color: '#fff',
     fontSize: scaleFont(16),
     fontWeight: '600',
   },
@@ -2490,7 +2450,7 @@ const styles = StyleSheet.create({
     width: scaleSize(60),
     height: scaleSize(60),
     borderRadius: scaleSize(30),
-    backgroundColor: '#fef2f2',
+    backgroundColor: '#f8fafc',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -2531,7 +2491,7 @@ const styles = StyleSheet.create({
   },
   modalButtonConfirm: {
     flex: 1,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#000',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
