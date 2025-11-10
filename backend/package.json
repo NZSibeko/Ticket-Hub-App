@@ -8,8 +8,10 @@
     "seed": "node seedData.js"
   },
   "dependencies": {
+    "axios": "^1.13.1",
     "bcryptjs": "^3.0.2",
     "body-parser": "^1.20.3",
+    "cheerio": "^1.1.2",
     "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

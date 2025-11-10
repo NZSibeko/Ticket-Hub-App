@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
+import { useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
   Text,
   TextInput,
-  StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Switch
+  View
 } from 'react-native';
-import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { Ionicons } from '@expo/vector-icons';
 
 const API_URL = 'http://localhost:3000';
 

@@ -506,7 +506,7 @@ const eventImages = {
   ]
 };
 
-const SearchEventsScreen = ({ navigation }) => {
+const SearchEventsScreen = ({ navigation, route }) => {
   const [allEvents, setAllEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -520,7 +520,38 @@ const SearchEventsScreen = ({ navigation }) => {
   const [apiError, setApiError] = useState(false);
   const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
-  const { getAuthHeader } = useAuth();
+  const { getAuthHeader, hasAdminPrivileges } = useAuth();
+
+  // Rest of the component code...
+
+  // Set header options based on user role
+  React.useLayoutEffect(() => {
+    if (hasAdminPrivileges()) {
+      navigation.setOptions({
+        headerShown: true,
+        headerTitle: "Browse Events",
+        headerLeft: () => (
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={{ paddingHorizontal: 16 }}
+          >
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+        ),
+        headerStyle: {
+          backgroundColor: '#fff',
+        },
+        headerTitleStyle: {
+          fontWeight: '600',
+          fontSize: 18,
+        },
+      });
+    } else {
+      navigation.setOptions({
+        headerShown: false, // Keep original tab behavior for customers
+      });
+    }
+  }, [navigation, hasAdminPrivileges]);
 
   // Reset screen state when navigating back
   useFocusEffect(
@@ -549,6 +580,7 @@ const SearchEventsScreen = ({ navigation }) => {
 
   const getEventImage = (event, index) => {
     if (event.image_url) return event.image_url;
+    if (event.event_image) return event.event_image;
 
     const eventName = event.event_name.toLowerCase();
     const description = (event.event_description || '').toLowerCase();
@@ -568,9 +600,51 @@ const SearchEventsScreen = ({ navigation }) => {
     }
   };
 
+  // Add this at the top of SearchEventsScreen component, after the state declarations:
+
+  // Listen for refresh from route params
+  useEffect(() => {
+    if (route.params?.refresh) {
+      console.log('🔄 Refresh requested in SearchEventsScreen');
+      fetchEvents();
+      // Clear the refresh param
+      navigation.setParams({ refresh: undefined });
+    }
+  }, [route.params?.refresh]);
+
+  // Also refresh when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      console.log('SearchEventsScreen focused - checking for updates');
+      fetchEvents();
+      
+      return () => {
+        console.log('SearchEventsScreen unfocused');
+        setIsScreenFocused(false);
+      };
+    }, [])
+  );
+
   const fetchEvents = async () => {
     try {
       setApiError(false);
+      
+      // Try to fetch real events from API first
+      try {
+        const response = await fetch(`${API_URL}/zi_events`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.d && data.d.results) {
+            console.log('✅ Loaded real events from API:', data.d.results.length);
+            setAllEvents(data.d.results);
+            return;
+          }
+        }
+      } catch (apiError) {
+        console.log('⚠️ Using mock data, API not available:', apiError.message);
+      }
+      
+      // Fallback to mock data
       setAllEvents(mockEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -888,6 +962,11 @@ const SearchEventsScreen = ({ navigation }) => {
 
     const isMobile = windowWidth < 768;
 
+    // Don't render footer for admin users
+    if (hasAdminPrivileges()) {
+      return null;
+    }
+
     return (
       <View style={styles.footer}>
         <View style={[
@@ -1031,7 +1110,10 @@ const SearchEventsScreen = ({ navigation }) => {
       <View style={styles.scrollableContent}>
         <ScrollView 
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollViewContent}
+          contentContainerStyle={[
+            styles.scrollViewContent,
+            hasAdminPrivileges() && styles.adminScrollViewContent
+          ]}
           showsVerticalScrollIndicator={true}
           scrollEventThrottle={16}
         >
@@ -1134,7 +1216,8 @@ const SearchEventsScreen = ({ navigation }) => {
             </View>
           )}
 
-          <Footer />
+          {/* Only show footer for non-admin users */}
+          {!hasAdminPrivileges() && <Footer />}
         </ScrollView>
       </View>
 
@@ -1313,6 +1396,9 @@ const styles = StyleSheet.create({
   scrollViewContent: {
     flexGrow: 1,
     paddingBottom: 0,
+  },
+  adminScrollViewContent: {
+    paddingBottom: 40,
   },
   scrollContentStart: {
     height: 10,

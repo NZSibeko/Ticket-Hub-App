@@ -8,10 +8,10 @@ import { AuthProvider } from './src/context/AuthContext';
 // Import screens
 import AdminDashboard from './src/screens/AdminDashboard';
 import CreateEventScreen from './src/screens/CreateEventScreen';
+import DiscoverScreen from './src/screens/DiscoverScreen';
 import EventDetailScreen from './src/screens/EventDetailScreen';
 import EventListScreen from './src/screens/EventListScreen';
 import EventManagementScreen from './src/screens/EventManagementScreen';
-import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import MyTicketsScreen from './src/screens/MyTicketsScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
@@ -63,7 +63,7 @@ function MainTabs() {
       />
       <Tab.Screen 
         name="DiscoverTab" 
-        component={HomeScreen}
+        component={DiscoverScreen}
         options={{ title: 'Discover' }}
       />
       <Tab.Screen 

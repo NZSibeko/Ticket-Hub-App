@@ -1,18 +1,32 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  StyleSheet, 
-  Alert, 
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import {
   ActivityIndicator,
-  TouchableOpacity,
-  Image,
+  Alert,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+
+const { width, height } = Dimensions.get('window');
+
+// Responsive scaling functions - matching ProfileScreen
+const scaleSize = (size) => {
+  const scale = width / 375;
+  return Math.ceil(size * Math.min(scale, 1.5));
+};
+
+const scaleFont = (size) => {
+  const scale = width / 375;
+  return Math.ceil(size * Math.min(scale, 1.3));
+};
 
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
@@ -27,206 +41,372 @@ const LoginScreen = ({ navigation }) => {
     }
 
     setIsLoading(true);
-    const result = await login(username, password);
-    setIsLoading(false);
-
-    if (result.success) {
-      navigation.replace('Home');
-    } else {
-      Alert.alert('Login Failed', result.error || 'Invalid credentials');
+    try {
+      const result = await login(username, password);
+      
+      if (result.success) {
+        navigation.replace('MainApp');
+      } else {
+        Alert.alert('Login Failed', result.error || 'Invalid credentials');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert('Login Error', 'An error occurred during login. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const handleForgotPassword = () => {
+    Alert.alert(
+      'Forgot Password',
+      'Please contact support at support@ticket-hub.com to reset your password.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const navigateToRegister = () => {
+    navigation.navigate('Registration');
+  };
+
+  // Calculate responsive widths
+  const getCardWidth = () => {
+    if (width >= 768) {
+      return Math.min(width - 80, 400);
+    }
+    return width - 32;
+  };
+
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.container}>
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Logo Section */}
-        <View style={styles.logoContainer}>
-          <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>LOGO</Text>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            {/* Logo Section */}
+            <View style={styles.logoContainer}>
+              <View style={styles.logoPlaceholder}>
+                <Ionicons name="ticket" size={scaleSize(50)} color="#000" />
+              </View>
+              <Text style={styles.appTitle}>Welcome to Ticket-Hub</Text>
+              <Text style={styles.appSubtitle}>Sign in to your account to continue</Text>
+            </View>
+
+            {/* Login Form Card */}
+            <View style={[styles.formContainer, { width: getCardWidth() }]}>
+              <Text style={styles.welcomeText}>Sign In</Text>
+              <Text style={styles.instructionText}>Enter your credentials to access your account</Text>
+
+              {/* Username/Email Input */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="person-outline" size={scaleFont(20)} color="#64748b" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Username or email"
+                    placeholderTextColor="#94a3b8"
+                    value={username}
+                    onChangeText={setUsername}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              {/* Password Input */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="lock-closed-outline" size={scaleFont(20)} color="#64748b" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Password"
+                    placeholderTextColor="#94a3b8"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              {/* Forgot Password */}
+              <TouchableOpacity 
+                style={styles.forgotPasswordContainer}
+                onPress={handleForgotPassword}
+                disabled={isLoading}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot your password?</Text>
+              </TouchableOpacity>
+
+              {/* Login Button */}
+              <TouchableOpacity 
+                style={[
+                  styles.loginButton, 
+                  isLoading && styles.loginButtonDisabled
+                ]}
+                onPress={handleLogin}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator color="#fff" size="small" />
+                    <Text style={styles.loginButtonText}>Signing In...</Text>
+                  </View>
+                ) : (
+                  <View style={styles.buttonContent}>
+                    <Ionicons name="log-in-outline" size={scaleFont(20)} color="#fff" />
+                    <Text style={styles.loginButtonText}>Sign In</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Register Section */}
+              <View style={styles.registerContainer}>
+                <Text style={styles.registerText}>Don't have an account?</Text>
+                <TouchableOpacity 
+                  onPress={navigateToRegister}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.registerLink}>Create Account</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Terms and Privacy - Moved outside form card */}
+            <View style={[styles.termsContainer, { width: getCardWidth() }]}>
+              <Text style={styles.termsText}>
+                By signing in, you agree to our{' '}
+                <Text 
+                  style={styles.termsLink}
+                  onPress={() => navigation.navigate('TermsConditions')}
+                >
+                  Terms
+                </Text>{' '}
+                and{' '}
+                <Text 
+                  style={styles.termsLink}
+                  onPress={() => navigation.navigate('PrivacyPolicy')}
+                >
+                  Privacy Policy
+                </Text>
+              </Text>
+            </View>
           </View>
-          <Text style={styles.appTitle}>Ticket-Hub</Text>
-          <Text style={styles.appSubtitle}>Your gateway to amazing events</Text>
-        </View>
-
-        {/* Login Form */}
-        <View style={styles.formContainer}>
-          <Text style={styles.instructionText}>Login to continue</Text>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Username or Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your username or email"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!isLoading}
-            />
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.loginButton, isLoading && styles.disabledButton]}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginButtonText}>LOGIN</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>Don't have an account? </Text>
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('Registration')}
-              disabled={isLoading}
-            >
-              <Text style={styles.registerLink}>Register</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
-  scrollContainer: {
+  keyboardAvoid: {
+    flex: 1,
+  },
+  scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+  },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   logoContainer: {
     alignItems: 'center',
     marginBottom: 40,
   },
   logoPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#000000',
+    width: scaleSize(100),
+    height: scaleSize(100),
+    borderRadius: scaleSize(50),
+    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 5,
-  },
-  logoText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
   },
   appTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: scaleFont(24),
+    fontWeight: '700',
+    color: '#000',
     marginBottom: 8,
     textAlign: 'center',
   },
   appSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: scaleFont(16),
+    color: '#64748b',
     textAlign: 'center',
+    lineHeight: 22,
   },
   formContainer: {
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
     padding: 24,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    marginBottom: 20,
   },
   welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: scaleFont(22),
+    fontWeight: '700',
+    color: '#000',
     marginBottom: 8,
     textAlign: 'center',
   },
   instructionText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
+    fontSize: scaleFont(14),
+    color: '#64748b',
+    marginBottom: 24,
     textAlign: 'center',
+    lineHeight: 20,
   },
   inputContainer: {
     marginBottom: 16,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    height: 50,
-    borderColor: '#ddd',
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
+    paddingVertical: 14,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: scaleFont(16),
+    color: '#000',
+    padding: 0,
+  },
+  forgotPasswordContainer: {
+    alignSelf: 'flex-end',
+    marginBottom: 24,
+  },
+  forgotPasswordText: {
+    fontSize: scaleFont(14),
+    color: '#000',
+    fontWeight: '500',
   },
   loginButton: {
-    backgroundColor: '#000000',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: '#000',
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
     marginBottom: 20,
   },
-  disabledButton: {
-    backgroundColor: '#cccccc',
+  loginButtonDisabled: {
+    backgroundColor: '#6b7280',
+    shadowOpacity: 0.1,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   loginButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#fff',
+    fontSize: scaleFont(16),
+    fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e2e8f0',
+  },
+  dividerText: {
+    paddingHorizontal: 16,
+    fontSize: scaleFont(14),
+    color: '#64748b',
+    fontWeight: '500',
   },
   registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 8,
   },
   registerText: {
-    color: '#666',
-    fontSize: 14,
+    color: '#64748b',
+    fontSize: scaleFont(14),
   },
   registerLink: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: 'bold',
+    color: '#000',
+    fontSize: scaleFont(14),
+    fontWeight: '600',
+  },
+  termsContainer: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  termsText: {
+    color: '#64748b',
+    fontSize: scaleFont(12),
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  termsLink: {
+    color: '#000',
+    fontWeight: '500',
   },
 });
 
-export default LoginScreen;
+export default LoginScreen

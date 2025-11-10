@@ -14,6 +14,7 @@ const compileNodeModules = [
   'expo-modules-core',
   'axios',
   '@expo/vector-icons',
+  '@react-native-async-storage/async-storage',
 ].map((moduleName) => path.resolve(appDirectory, `node_modules/${moduleName}`));
 
 // Babel loader configuration
@@ -22,6 +23,7 @@ const babelLoaderConfiguration = {
   include: [
     path.resolve(appDirectory, 'index.web.js'),
     path.resolve(appDirectory, 'App.js'),
+    path.resolve(appDirectory, 'App.web.js'),
     path.resolve(appDirectory, 'app'),
     path.resolve(appDirectory, 'src'),
     path.resolve(appDirectory, 'components'),
@@ -114,6 +116,7 @@ module.exports = {
       // Ignore problematic expo modules on web
       'expo-camera': path.resolve(__dirname, 'src/mocks/expo-camera.js'),
       'expo-status-bar': path.resolve(__dirname, 'src/mocks/expo-status-bar.js'),
+      '@react-native-async-storage/async-storage': path.resolve(__dirname, 'node_modules/@react-native-async-storage/async-storage'),
     },
     extensions: ['.web.tsx', '.web.ts', '.web.js', '.web.jsx', '.tsx', '.ts', '.js', '.jsx', '.mjs'],
     fullySpecified: false,

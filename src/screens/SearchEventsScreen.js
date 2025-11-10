@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-  ActivityIndicator,
-  TextInput,
-  Modal
-} from 'react-native';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 const API_URL = 'http://localhost:3000';
@@ -48,7 +48,7 @@ const eventImages = {
   ]
 };
 
-const HomeScreen = ({ navigation }) => {
+const SearchEventsScreen = ({ navigation }) => {
   const [allEvents, setAllEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -694,4 +694,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+export default SearchEventsScreen;

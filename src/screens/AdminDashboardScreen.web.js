@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -43,61 +42,65 @@ const BarChart = ({ data, labels, color = '#6366f1', height = 200 }) => {
   );
 };
 
-const LineChart = ({ data, labels, color = '#6366f1', height = 200 }) => {
-  const maxValue = Math.max(...data);
+const PieChart = ({ data, colors, labels, size = 200 }) => {
+  const total = data.reduce((sum, value) => sum + value, 0);
+  let currentAngle = -90;
   
+  const slices = data.map((value, index) => {
+    const percentage = (value / total) * 100;
+    const angle = (percentage / 100) * 360;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+    currentAngle = endAngle;
+    
+    return {
+      value,
+      percentage,
+      startAngle,
+      endAngle,
+      color: colors[index]
+    };
+  });
+
   return (
-    <View style={[styles.chartContainer, { height }]}>
-      <View style={styles.lineChart}>
-        {data.map((value, index) => (
-          <View
-            key={index}
-            style={[
-              styles.linePoint,
-              {
-                left: `${(index / (data.length - 1)) * 100}%`,
-                bottom: `${(value / maxValue) * 80}%`,
-                backgroundColor: color
-              }
-            ]}
-          />
-        ))}
+    <View style={styles.pieChartContainer}>
+      <View style={[styles.pieChart, { width: size, height: size }]}>
+        <svg width={size} height={size}>
+          {slices.map((slice, index) => {
+            const radius = size / 2 - 10;
+            const centerX = size / 2;
+            const centerY = size / 2;
+            
+            const startX = centerX + radius * Math.cos((slice.startAngle * Math.PI) / 180);
+            const startY = centerY + radius * Math.sin((slice.startAngle * Math.PI) / 180);
+            const endX = centerX + radius * Math.cos((slice.endAngle * Math.PI) / 180);
+            const endY = centerY + radius * Math.sin((slice.endAngle * Math.PI) / 180);
+            
+            const largeArc = slice.percentage > 50 ? 1 : 0;
+            
+            const path = `M ${centerX} ${centerY} L ${startX} ${startY} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
+            
+            return (
+              <path
+                key={index}
+                d={path}
+                fill={slice.color}
+                stroke="#fff"
+                strokeWidth="2"
+              />
+            );
+          })}
+        </svg>
       </View>
-    </View>
-  );
-};
-
-const ProgressRing = ({ progress, size = 60, strokeWidth = 6, color = '#6366f1' }) => {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
-
-  return (
-    <View style={[styles.progressRing, { width: size, height: size }]}>
-      <svg width={size} height={size}>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="#e2e8f0"
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={color}
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </svg>
-      <View style={styles.progressText}>
-        <Text style={styles.progressValue}>{progress}%</Text>
+      <View style={styles.pieChartLegend}>
+        {slices.map((slice, index) => (
+          <View key={index} style={styles.pieLegendItem}>
+            <View style={[styles.pieLegendColor, { backgroundColor: slice.color }]} />
+            <Text style={styles.pieLegendText}>
+              {labels[index]}: {slice.percentage.toFixed(1)}%
+            </Text>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -123,8 +126,24 @@ const AdminDashboardScreen = ({ navigation }) => {
   const fetchDashboardData = async () => {
     try {
       const headers = getAuthHeader();
-      const response = await axios.get(`${API_URL}/api/admin/dashboard/stats?range=${timeRange}`, { headers });
-      setStats(response.data);
+      
+      if (!headers.Authorization) {
+        console.log('No authorization header available');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/dashboard/stats?range=${timeRange}`, {
+        method: 'GET',
+        headers: headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setStats(data);
       
       setRealTimeData({
         liveAttendees: Math.floor(Math.random() * 500) + 100,
@@ -132,10 +151,12 @@ const AdminDashboardScreen = ({ navigation }) => {
         activeEventsRightNow: Math.floor(Math.random() * 8) + 4,
         revenueThisHour: Math.floor(Math.random() * 5000) + 2000
       });
+      
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      // Enhanced mock data with detailed analytics
-      setStats({
+      
+      // Enhanced mock data
+      const mockStats = {
         totalEvents: 45,
         totalTickets: 1250,
         totalRevenue: 187500,
@@ -149,6 +170,12 @@ const AdminDashboardScreen = ({ navigation }) => {
         conversionRate: 12.5,
         customerSatisfaction: 4.7,
         refundRate: 2.3,
+        completedEvents: 30,
+        cancelledEvents: 2,
+        vipTicketsSold: 180,
+        revenueThisMonth: 87500,
+        avgAttendanceRate: 85.2,
+        customerGrowth: 15.8,
         ticketSales: [120, 190, 300, 500, 200, 300, 450, 320, 280, 410, 380, 520],
         revenueData: [15000, 30000, 45000, 60000, 75000, 90000, 112500, 98000, 85000, 110000, 105000, 125000],
         eventPerformance: [
@@ -161,48 +188,54 @@ const AdminDashboardScreen = ({ navigation }) => {
             scanned: 420,
             date: '2024-12-15',
             location: 'Convention Center',
+            category: 'Technology',
             ticketTypes: [
               { name: 'VIP', price: 300, sold: 50 },
               { name: 'Standard', price: 150, sold: 400 }
             ],
             attendanceRate: 93.3,
             revenuePerAttendee: 160.7,
-            peakAttendance: 380
+            peakAttendance: 380,
+            utilization: 90
           },
           { 
             id: 2,
-            name: 'Music Festival', 
-            sold: 1200, 
-            capacity: 1500, 
-            revenue: 180000,
-            scanned: 1100,
-            date: '2024-11-20',
-            location: 'Central Park',
+            name: 'Summer Music Festival', 
+            sold: 850, 
+            capacity: 1000, 
+            revenue: 127500,
+            scanned: 800,
+            date: '2024-12-20',
+            location: 'City Park',
+            category: 'Music',
             ticketTypes: [
-              { name: 'VIP', price: 500, sold: 100 },
-              { name: 'GA', price: 150, sold: 1100 }
+              { name: 'VIP', price: 250, sold: 100 },
+              { name: 'Standard', price: 150, sold: 750 }
             ],
-            attendanceRate: 91.7,
-            revenuePerAttendee: 163.6,
-            peakAttendance: 1050
+            attendanceRate: 94.1,
+            revenuePerAttendee: 159.4,
+            peakAttendance: 720,
+            utilization: 85
           },
           { 
             id: 3,
-            name: 'Art Exhibition', 
-            sold: 200, 
-            capacity: 300, 
-            revenue: 30000,
-            scanned: 180,
-            date: '2024-10-05',
-            location: 'Art Gallery',
+            name: 'Food & Wine Expo', 
+            sold: 320, 
+            capacity: 400, 
+            revenue: 48000,
+            scanned: 290,
+            date: '2024-11-28',
+            location: 'Exhibition Hall',
+            category: 'Food',
             ticketTypes: [
-              { name: 'Premium', price: 200, sold: 30 },
-              { name: 'Standard', price: 100, sold: 170 }
+              { name: 'Premium', price: 200, sold: 80 },
+              { name: 'Standard', price: 120, sold: 240 }
             ],
-            attendanceRate: 90.0,
-            revenuePerAttendee: 166.7,
-            peakAttendance: 160
-          }
+            attendanceRate: 90.6,
+            revenuePerAttendee: 165.5,
+            peakAttendance: 250,
+            utilization: 80
+          },
         ],
         kpiDetails: {
           revenue: {
@@ -273,8 +306,9 @@ const AdminDashboardScreen = ({ navigation }) => {
             ]
           }
         }
-      });
+      };
       
+      setStats(mockStats);
       setRealTimeData({
         liveAttendees: 327,
         ticketsScannedLastHour: 42,
@@ -340,6 +374,19 @@ const AdminDashboardScreen = ({ navigation }) => {
     </View>
   );
 
+  const QuickStatCard = ({ title, value, subtitle, color, icon }) => (
+    <View style={styles.quickStatCard}>
+      <View style={styles.quickStatHeader}>
+        <View style={[styles.quickStatIcon, { backgroundColor: color + '20' }]}>
+          <Ionicons name={icon} size={20} color={color} />
+        </View>
+        <Text style={styles.quickStatTitle}>{title}</Text>
+      </View>
+      <Text style={styles.quickStatValue}>{value}</Text>
+      {subtitle && <Text style={styles.quickStatSubtitle}>{subtitle}</Text>}
+    </View>
+  );
+
   const renderKPIModal = () => {
     if (!selectedKPI || !stats?.kpiDetails) return null;
     
@@ -352,8 +399,8 @@ const AdminDashboardScreen = ({ navigation }) => {
         animationType="slide"
         onRequestClose={() => setShowKPIModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.kpiModalContent}>
+        <View style={styles.fullModalOverlay}>
+          <View style={styles.fullModalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{kpiData.title}</Text>
               <TouchableOpacity onPress={() => setShowKPIModal(false)}>
@@ -361,8 +408,7 @@ const AdminDashboardScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.kpiModalScroll}>
-              {/* Current Performance */}
+            <ScrollView style={styles.fullModalScroll}>
               <View style={styles.kpiSection}>
                 <Text style={styles.sectionSubtitle}>Current Performance</Text>
                 <View style={styles.performanceRow}>
@@ -400,7 +446,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                 </View>
               </View>
 
-              {/* Breakdown */}
               {kpiData.breakdown && (
                 <View style={styles.kpiSection}>
                   <Text style={styles.sectionSubtitle}>Breakdown</Text>
@@ -418,7 +463,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* Trend Chart */}
               {kpiData.trends && (
                 <View style={styles.kpiSection}>
                   <Text style={styles.sectionSubtitle}>7-Day Trend</Text>
@@ -433,7 +477,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* Insights */}
               {kpiData.insights && (
                 <View style={styles.kpiSection}>
                   <Text style={styles.sectionSubtitle}>Key Insights</Text>
@@ -447,138 +490,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                   </View>
                 </View>
               )}
-
-              {/* Related Events */}
-              <View style={styles.kpiSection}>
-                <Text style={styles.sectionSubtitle}>Top Performing Events</Text>
-                {stats.eventPerformance.slice(0, 3).map((event) => (
-                  <TouchableOpacity 
-                    key={event.id}
-                    style={styles.eventItem}
-                    onPress={() => {
-                      setSelectedEvent(event);
-                      setShowEventModal(true);
-                    }}
-                  >
-                    <View style={styles.eventInfo}>
-                      <Text style={styles.eventName}>{event.name}</Text>
-                      <Text style={styles.eventDetails}>
-                        {event.sold} tickets • R{event.revenue.toLocaleString()} • {event.attendanceRate}% attendance
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  const renderEventModal = () => {
-    if (!selectedEvent) return null;
-
-    return (
-      <Modal
-        visible={showEventModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowEventModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.eventModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{selectedEvent.name}</Text>
-              <TouchableOpacity onPress={() => setShowEventModal(false)}>
-                <Ionicons name="close" size={24} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.eventModalScroll}>
-              {/* Event Details */}
-              <View style={styles.eventSection}>
-                <Text style={styles.sectionSubtitle}>Event Details</Text>
-                <View style={styles.detailGrid}>
-                  <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>Date</Text>
-                    <Text style={styles.detailValue}>{selectedEvent.date}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>Location</Text>
-                    <Text style={styles.detailValue}>{selectedEvent.location}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>Capacity</Text>
-                    <Text style={styles.detailValue}>{selectedEvent.capacity}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>Sold</Text>
-                    <Text style={styles.detailValue}>{selectedEvent.sold}</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Performance Metrics */}
-              <View style={styles.eventSection}>
-                <Text style={styles.sectionSubtitle}>Performance Metrics</Text>
-                <View style={styles.performanceGrid}>
-                  <View style={styles.performanceCard}>
-                    <ProgressRing progress={selectedEvent.attendanceRate} color="#10b981" />
-                    <Text style={styles.performanceCardLabel}>Attendance Rate</Text>
-                  </View>
-                  <View style={styles.performanceCard}>
-                    <Text style={styles.performanceCardValue}>R{selectedEvent.revenuePerAttendee}</Text>
-                    <Text style={styles.performanceCardLabel}>Revenue/Attendee</Text>
-                  </View>
-                  <View style={styles.performanceCard}>
-                    <Text style={styles.performanceCardValue}>{selectedEvent.peakAttendance}</Text>
-                    <Text style={styles.performanceCardLabel}>Peak Attendance</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Ticket Breakdown */}
-              {selectedEvent.ticketTypes && (
-                <View style={styles.eventSection}>
-                  <Text style={styles.sectionSubtitle}>Ticket Sales Breakdown</Text>
-                  {selectedEvent.ticketTypes.map((ticket, index) => (
-                    <View key={index} style={styles.ticketType}>
-                      <View style={styles.ticketInfo}>
-                        <Text style={styles.ticketName}>{ticket.name}</Text>
-                        <Text style={styles.ticketDetails}>
-                          {ticket.sold} sold • R{ticket.price}
-                        </Text>
-                      </View>
-                      <Text style={styles.ticketRevenue}>
-                        R{(ticket.sold * ticket.price).toLocaleString()}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Scan Analytics */}
-              <View style={styles.eventSection}>
-                <Text style={styles.sectionSubtitle}>Scan Analytics</Text>
-                <View style={styles.scanStats}>
-                  <View style={styles.scanStat}>
-                    <Text style={styles.scanStatValue}>{selectedEvent.scanned}</Text>
-                    <Text style={styles.scanStatLabel}>Tickets Scanned</Text>
-                  </View>
-                  <View style={styles.scanStat}>
-                    <Text style={styles.scanStatValue}>{selectedEvent.sold - selectedEvent.scanned}</Text>
-                    <Text style={styles.scanStatLabel}>No Shows</Text>
-                  </View>
-                  <View style={styles.scanStat}>
-                    <Text style={styles.scanStatValue}>
-                      {((selectedEvent.scanned / selectedEvent.sold) * 100).toFixed(1)}%
-                    </Text>
-                    <Text style={styles.scanStatLabel}>Scan Rate</Text>
-                  </View>
-                </View>
-              </View>
             </ScrollView>
           </View>
         </View>
@@ -599,15 +510,8 @@ const AdminDashboardScreen = ({ navigation }) => {
 
   return (
     <ScreenContainer>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#1e293b" />
-        </TouchableOpacity>
-        <View>
+        <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Analytics Dashboard</Text>
           <Text style={styles.headerSubtitle}>Real-time event and ticket insights</Text>
         </View>
@@ -626,7 +530,11 @@ const AdminDashboardScreen = ({ navigation }) => {
         </View>
       </View>
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.container} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Live Metrics */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -640,32 +548,30 @@ const AdminDashboardScreen = ({ navigation }) => {
             <MetricCard
               title="Active Attendees"
               value={realTimeData?.liveAttendees || 0}
+              description="Currently at events"
               color="#ef4444"
               icon="people"
-              description="Currently at events"
             />
             <MetricCard
-              title="Scanned Last Hour"
+              title="Scanned This Hour"
               value={realTimeData?.ticketsScannedLastHour || 0}
-              change={12}
+              description="Last 60 minutes"
               color="#10b981"
               icon="scan"
-              description="Ticket validations"
             />
             <MetricCard
               title="Active Events"
               value={realTimeData?.activeEventsRightNow || 0}
-              color="#6366f1"
+              description="Running now"
+              color="#f59e0b"
               icon="calendar"
-              description="Happening now"
             />
             <MetricCard
-              title="Revenue This Hour"
-              value={`R${(realTimeData?.revenueThisHour || 0).toLocaleString()}`}
-              change={8}
-              color="#f59e0b"
+              title="Revenue/Hour"
+              value={`R${realTimeData?.revenueThisHour || 0}`}
+              description="Current hour"
+              color="#6366f1"
               icon="cash"
-              description="Current hour sales"
             />
           </View>
         </View>
@@ -732,11 +638,18 @@ const AdminDashboardScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sales Analytics</Text>
           <View style={styles.analyticsRow}>
-            <View style={styles.chartCard}>
+            <TouchableOpacity 
+              style={styles.chartCard}
+              onPress={() => {
+                setSelectedKPI('tickets');
+                setShowKPIModal(true);
+              }}
+              activeOpacity={0.7}
+            >
               <Text style={styles.chartTitle}>Ticket Sales Trend</Text>
               <BarChart 
                 data={stats?.ticketSales || []}
-                labels={['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']}
+                labels={['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']}
                 color="#6366f1"
                 height={200}
               />
@@ -746,144 +659,170 @@ const AdminDashboardScreen = ({ navigation }) => {
                   <Text style={styles.legendText}>Tickets Sold</Text>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
             
-            <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>Revenue Growth</Text>
-              <LineChart 
-                data={stats?.revenueData || []}
-                labels={['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']}
-                color="#10b981"
-                height={200}
+            <TouchableOpacity 
+              style={styles.chartCard}
+              onPress={() => {
+                setSelectedKPI('revenue');
+                setShowKPIModal(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.chartTitle}>Revenue Distribution</Text>
+              <PieChart 
+                data={[24, 35, 21, 20]}
+                colors={['#6366f1', '#10b981', '#f59e0b', '#ef4444']}
+                labels={['Q1', 'Q2', 'Q3', 'Q4']}
+                size={180}
               />
-              <View style={styles.chartLegend}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendColor, { backgroundColor: '#10b981' }]} />
-                  <Text style={styles.legendText}>Revenue (R)</Text>
-                </View>
-              </View>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* Event Performance */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Event Performance</Text>
-          <View style={styles.performanceGrid}>
-            {stats?.eventPerformance?.map((event, index) => {
-              const utilization = (event.sold / event.capacity) * 100;
-              return (
-                <TouchableOpacity 
-                  key={event.id}
-                  style={styles.performanceCard}
-                  onPress={() => {
-                    setSelectedEvent(event);
-                    setShowEventModal(true);
-                  }}
-                >
-                  <View style={styles.performanceHeader}>
-                    <Text style={styles.eventName}>{event.name}</Text>
-                    <Text style={styles.eventRevenue}>R{event.revenue.toLocaleString()}</Text>
-                  </View>
-                  <View style={styles.performanceStats}>
-                    <View style={styles.performanceStat}>
-                      <Text style={styles.performanceLabel}>Tickets Sold</Text>
-                      <Text style={styles.performanceValue}>{event.sold}</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Event Performance</Text>
+            <Text style={styles.sectionSubtitle}>Top performing events by revenue</Text>
+          </View>
+          <View style={styles.eventPerformanceContainer}>
+            <View style={styles.eventPerformanceGrid}>
+              {stats?.eventPerformance?.map((event) => {
+                const utilization = (event.sold / event.capacity) * 100;
+                const categoryColors = {
+                  'Technology': '#6366f1',
+                  'Music': '#ec4899',
+                  'Arts': '#8b5cf6',
+                  'Food': '#f59e0b',
+                  'Business': '#10b981',
+                  'Entertainment': '#ef4444',
+                  'Education': '#0ea5e9'
+                };
+                const categoryColor = categoryColors[event.category] || '#64748b';
+                
+                return (
+                  <TouchableOpacity 
+                    key={event.id}
+                    style={styles.eventPerformanceCard}
+                    onPress={() => {
+                      setSelectedEvent(event);
+                      setShowEventModal(true);
+                    }}
+                  >
+                    <View style={styles.eventCardHeader}>
+                      <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '20' }]}>
+                        <Text style={[styles.categoryText, { color: categoryColor }]}>
+                          {event.category}
+                        </Text>
+                      </View>
+                      <View style={styles.revenueBadge}>
+                        <Text style={styles.revenueText}>R{(event.revenue / 1000).toFixed(1)}k</Text>
+                      </View>
                     </View>
-                    <View style={styles.performanceStat}>
-                      <ProgressRing progress={utilization} size={60} color="#6366f1" />
-                      <Text style={styles.performanceLabel}>Utilization</Text>
+
+                    <Text style={styles.eventName} numberOfLines={1}>{event.name}</Text>
+                    <View style={styles.eventMetaRow}>
+                      <View style={styles.eventMeta}>
+                        <Ionicons name="calendar-outline" size={12} color="#64748b" />
+                        <Text style={styles.eventMetaText}>{event.date}</Text>
+                      </View>
+                      <View style={styles.eventMeta}>
+                        <Ionicons name="location-outline" size={12} color="#64748b" />
+                        <Text style={styles.eventMetaText} numberOfLines={1}>{event.location}</Text>
+                      </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+
+                    <View style={styles.statsRow}>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{event.sold}</Text>
+                        <Text style={styles.statLabel}>Sold</Text>
+                      </View>
+                      <View style={styles.statDivider} />
+                      <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{event.capacity}</Text>
+                        <Text style={styles.statLabel}>Capacity</Text>
+                      </View>
+                      <View style={styles.statDivider} />
+                      <View style={styles.statItem}>
+                        <Text style={[styles.statValue, { color: categoryColor }]}>
+                          {utilization.toFixed(0)}%
+                        </Text>
+                        <Text style={styles.statLabel}>Util.</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.progressBarContainer}>
+                      <View style={styles.progressBarBg}>
+                        <View 
+                          style={[
+                            styles.progressBarFill,
+                            { 
+                              width: `${utilization}%`,
+                              backgroundColor: categoryColor
+                            }
+                          ]} 
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.eventFooter}>
+                      <View style={styles.attendanceInfo}>
+                        <Ionicons name="people" size={14} color="#10b981" />
+                        <Text style={styles.attendanceText}>
+                          {event.attendanceRate}% attendance
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         </View>
 
-        {/* Quick Stats */}
+        {/* Quick Statistics */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Statistics</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Quick Statistics</Text>
+            <Text style={styles.sectionSubtitle}>Key metrics at a glance</Text>
+          </View>
           <View style={styles.quickStatsGrid}>
-            <View style={styles.quickStat}>
-              <Ionicons name="time" size={20} color="#64748b" />
-              <Text style={styles.quickStatValue}>{stats?.ticketsSoldToday || 0}</Text>
-              <Text style={styles.quickStatLabel}>Sold Today</Text>
-            </View>
-            <View style={styles.quickStat}>
-              <Ionicons name="checkmark-circle" size={20} color="#64748b" />
-              <Text style={styles.quickStatValue}>{stats?.ticketsScanned || 0}</Text>
-              <Text style={styles.quickStatLabel}>Scanned Total</Text>
-            </View>
-            <View style={styles.quickStat}>
-              <Ionicons name="pricetag" size={20} color="#64748b" />
-              <Text style={styles.quickStatValue}>R{stats?.averageTicketPrice || 0}</Text>
-              <Text style={styles.quickStatLabel}>Avg. Price</Text>
-            </View>
-            <View style={styles.quickStat}>
-              <Ionicons name="person" size={20} color="#64748b" />
-              <Text style={styles.quickStatValue}>{stats?.totalCustomers || 0}</Text>
-              <Text style={styles.quickStatLabel}>Customers</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionsGrid}>
-            <TouchableOpacity 
-              style={styles.actionCard}
-              onPress={() => navigation.navigate('CreateEvent')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#6366f120' }]}>
-                <Ionicons name="add-circle" size={24} color="#6366f1" />
-              </View>
-              <Text style={styles.actionTitle}>Create Event</Text>
-              <Text style={styles.actionSubtitle}>Add new event</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionCard}
-              onPress={() => navigation.navigate('Scanner')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#10b98120' }]}>
-                <Ionicons name="qr-code" size={24} color="#10b981" />
-              </View>
-              <Text style={styles.actionTitle}>QR Scanner</Text>
-              <Text style={styles.actionSubtitle}>Validate tickets</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionCard}
-              onPress={() => navigation.navigate('EventManagement')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#f59e0b20' }]}>
-                <Ionicons name="calendar" size={24} color="#f59e0b" />
-              </View>
-              <Text style={styles.actionTitle}>Manage Events</Text>
-              <Text style={styles.actionSubtitle}>View all events</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionCard}
-              onPress={() => navigation.navigate('UserManagement')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#ef444420' }]}>
-                <Ionicons name="people" size={24} color="#ef4444" />
-              </View>
-              <Text style={styles.actionTitle}>Users</Text>
-              <Text style={styles.actionSubtitle}>Manage users</Text>
-            </TouchableOpacity>
+            <QuickStatCard
+              title="Tickets Sold Today"
+              value={stats?.ticketsSoldToday || 0}
+              subtitle="Today's sales"
+              color="#10b981"
+              icon="ticket"
+            />
+            <QuickStatCard
+              title="Average Ticket Price"
+              value={`R${stats?.averageTicketPrice || 0}`}
+              subtitle="Across all events"
+              color="#6366f1"
+              icon="cash"
+            />
+            <QuickStatCard
+              title="Conversion Rate"
+              value={`${stats?.conversionRate || 0}%`}
+              subtitle="Views to purchases"
+              color="#f59e0b"
+              icon="trending-up"
+            />
+            <QuickStatCard
+              title="Customer Growth"
+              value={`+${stats?.customerGrowth || 0}%`}
+              subtitle="This month"
+              color="#ef4444"
+              icon="people"
+            />
           </View>
         </View>
       </ScrollView>
 
-      {/* KPI Detail Modal */}
+      {/* Render modals */}
       {renderKPIModal()}
-
-      {/* Event Detail Modal */}
-      {renderEventModal()}
     </ScreenContainer>
   );
 };
@@ -899,8 +838,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  backButton: {
-    padding: 8,
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
@@ -925,10 +865,7 @@ const styles = StyleSheet.create({
   },
   timeButtonActive: {
     backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    boxShadow: '0px 1px 2px rgba(0,0,0,0.1)',
     elevation: 2,
   },
   timeButtonText: {
@@ -942,6 +879,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  scrollContent: {
+    paddingBottom: 80,
   },
   centered: {
     flex: 1,
@@ -998,26 +938,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   metricCard: {
-    width: (width - 56) / 2,
+    flex: 1,
+    minWidth: (width - 56) / 2,
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  kpiCard: {
-    width: (width - 56) / 2,
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 1px 3px rgba(0,0,0,0.05)',
+    elevation: 1,
   },
   metricHeader: {
     flexDirection: 'row',
@@ -1025,34 +954,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 8,
   },
-  kpiHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
   metricIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  kpiIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   metricTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  kpiTitle: {
     fontSize: 12,
     fontWeight: '600',
     color: '#64748b',
@@ -1065,18 +974,7 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     marginBottom: 4,
   },
-  kpiValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
   metricDescription: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginBottom: 8,
-  },
-  kpiDescription: {
     fontSize: 11,
     color: '#94a3b8',
     marginBottom: 8,
@@ -1086,14 +984,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  metricChangeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  kpiCard: {
+    flex: 1,
+    minWidth: (width - 56) / 2,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 1px 3px rgba(0,0,0,0.05)',
+    elevation: 1,
+  },
+  kpiHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  kpiIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  kpiTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  kpiValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  kpiDescription: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginBottom: 8,
+  },
   kpiChange: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  metricChangeText: {
-    fontSize: 11,
-    fontWeight: '600',
   },
   kpiChangeText: {
     fontSize: 11,
@@ -1107,15 +1047,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 1px 3px rgba(0,0,0,0.05)',
+    elevation: 1,
   },
   chartTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1e293b',
     marginBottom: 16,
@@ -1128,32 +1067,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     height: '100%',
-    width: '100%',
-    justifyContent: 'space-between',
+    gap: 8,
   },
   barContainer: {
-    alignItems: 'center',
     flex: 1,
+    alignItems: 'center',
+    height: '100%',
   },
   bar: {
     width: 12,
     borderRadius: 6,
-    marginBottom: 8,
+    minHeight: 4,
   },
   barLabel: {
     fontSize: 10,
     color: '#64748b',
-  },
-  lineChart: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-  },
-  linePoint: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    position: 'absolute',
+    marginTop: 4,
   },
   chartLegend: {
     flexDirection: 'row',
@@ -1167,192 +1096,251 @@ const styles = StyleSheet.create({
   },
   legendColor: {
     width: 12,
-    height: 12,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
   },
   legendText: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#64748b',
   },
-  performanceGrid: {
-    gap: 12,
+  pieChartContainer: {
+    alignItems: 'center',
+    gap: 16,
   },
-  performanceCard: {
+  pieChart: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pieChartLegend: {
+    gap: 8,
+    width: '100%',
+  },
+  pieLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pieLegendColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+  },
+  pieLegendText: {
+    fontSize: 12,
+    color: '#475569',
+  },
+  eventPerformanceContainer: {
+    alignItems: 'center',
+  },
+  eventPerformanceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    maxWidth: 1200,
+    width: '100%',
+  },
+  eventPerformanceCard: {
+    width: 'calc(50% - 8px)',
+    minWidth: 300,
+    maxWidth: 580,
     backgroundColor: '#fff',
-    padding: 16,
+    padding: 20,
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 2px 8px rgba(0,0,0,0.06)',
+    elevation: 2,
+    height: 280,
   },
-  performanceHeader: {
+  eventCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  categoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  categoryText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  revenueBadge: {
+    backgroundColor: '#f0f9ff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  revenueText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0369a1',
   },
   eventName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1e293b',
+    marginBottom: 8,
   },
-  eventRevenue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#10b981',
+  eventMetaRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
   },
-  performanceStats: {
+  eventMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  eventMetaText: {
+    fontSize: 11,
+    color: '#64748b',
+    flex: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#e2e8f0',
+  },
+  progressBarContainer: {
+    marginBottom: 12,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  eventFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  performanceStat: {
+  attendanceInfo: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
-  performanceLabel: {
+  attendanceText: {
     fontSize: 12,
-    color: '#64748b',
-    marginTop: 4,
-  },
-  performanceValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  progressRing: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  progressText: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  progressValue: {
-    fontSize: 12,
+    color: '#10b981',
     fontWeight: '600',
-    color: '#1e293b',
   },
   quickStatsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  quickStat: {
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    flex: 1,
-    marginHorizontal: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  quickStatValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  quickStatLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
-  actionCard: {
+  quickStatCard: {
     width: (width - 56) / 2,
     backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  actionIcon: {
-    width: 48,
-    height: 48,
+    padding: 16,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 1px 3px rgba(0,0,0,0.05)',
+    elevation: 1,
+  },
+  quickStatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  quickStatIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  actionTitle: {
-    fontSize: 16,
+  quickStatTitle: {
+    fontSize: 12,
     fontWeight: '600',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  quickStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
     color: '#1e293b',
-    textAlign: 'center',
     marginBottom: 4,
   },
-  actionSubtitle: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'center',
+  quickStatSubtitle: {
+    fontSize: 11,
+    color: '#94a3b8',
   },
-  modalOverlay: {
+  fullModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  kpiModalContent: {
+  fullModalContent: {
+    flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    width: '100%',
-    maxWidth: 500,
-    maxHeight: '80%',
+    marginTop: 50,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
-  eventModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+  fullModalScroll: {
+    flex: 1,
     padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#1e293b',
   },
-  kpiModalScroll: {
-    maxHeight: 500,
-  },
-  eventModalScroll: {
-    maxHeight: 500,
-  },
   kpiSection: {
-    marginBottom: 24,
-  },
-  eventSection: {
     marginBottom: 24,
   },
   performanceRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 16,
   },
   performanceMetric: {
-    alignItems: 'center',
     flex: 1,
   },
   performanceLabel: {
@@ -1361,8 +1349,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   performanceValue: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#1e293b',
   },
   growthIndicator: {
@@ -1375,23 +1363,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   breakdownGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
   },
   breakdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: '#f8fafc',
     padding: 12,
     borderRadius: 8,
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 100,
   },
   breakdownLabel: {
-    fontSize: 10,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 4,
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '500',
   },
   breakdownValue: {
     fontSize: 14,
@@ -1404,7 +1389,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   insightsList: {
-    gap: 8,
+    gap: 12,
   },
   insightItem: {
     flexDirection: 'row',
@@ -1416,115 +1401,9 @@ const styles = StyleSheet.create({
   },
   insightText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     color: '#92400e',
-    lineHeight: 16,
-  },
-  eventItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  eventInfo: {
-    flex: 1,
-  },
-  eventName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 2,
-  },
-  eventDetails: {
-    fontSize: 11,
-    color: '#64748b',
-  },
-  detailGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  detailItem: {
-    flex: 1,
-    minWidth: 100,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  performanceGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  performanceCard: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  performanceCardValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  performanceCardLabel: {
-    fontSize: 11,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  ticketType: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  ticketInfo: {
-    flex: 1,
-  },
-  ticketName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 2,
-  },
-  ticketDetails: {
-    fontSize: 11,
-    color: '#64748b',
-  },
-  ticketRevenue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#10b981',
-  },
-  scanStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  scanStat: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  scanStatValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  scanStatLabel: {
-    fontSize: 11,
-    color: '#64748b',
-    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

@@ -4,13 +4,15 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "webpack serve --mode development",
-    "build:web": "webpack --mode production",
-    "serve:web": "npx serve dist",
-    "lint": "expo lint"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "webpack serve --mode development --config webpack.config.js --port 3001",
+    "web:build": "webpack --mode production --config webpack.config.js",
+    "dev": "concurrently \"npm run start\" \"npm run web\"",
+    "dev:mobile": "npm start",
+    "dev:web": "npm run web",
+    "install:all": "npm install",
+    "clean": "rm -rf node_modules && rm -rf .expo && npm install"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -24,9 +26,10 @@
     "@stripe/stripe-react-native": "^0.54.1",
     "axios": "^1.12.2",
     "buffer": "^6.0.3",
+    "cheerio": "^1.1.2",
+    "cors": "^2.8.5",
     "expo": "~54.0.12",
-    "expo-barcode-scanner": "^13.0.1",
-    "expo-camera": "~17.0.8",
+    "expo-camera": "~17.0.9",
     "expo-constants": "~18.0.9",
     "expo-font": "~14.0.8",
     "expo-haptics": "~15.0.7",
@@ -56,8 +59,10 @@
     "react-native-svg": "^15.13.0",
     "react-native-svg-web": "^1.0.9",
     "react-native-tab-view": "^4.1.3",
+    "react-native-vision-camera": "^4.7.2",
     "react-native-web": "^0.21.0",
     "react-native-worklets": "0.5.1",
+    "recharts": "^3.3.0",
     "sequelize": "^6.37.7"
   },
   "devDependencies": {

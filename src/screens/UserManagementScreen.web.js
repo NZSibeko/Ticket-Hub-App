@@ -1,13 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios'; // Added missing import
+import axios from 'axios';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Modal,
-  ScrollView // Added missing import
-  ,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -132,7 +131,7 @@ const UserManagementScreen = ({ navigation }) => {
       
       // Add the new user to the local state
       const newUser = {
-        id: users.length + 1, // Temporary ID until refresh
+        id: users.length + 1,
         name: `${createUserData.firstName} ${createUserData.lastName}`,
         email: createUserData.email,
         role: createUserData.role,
@@ -165,12 +164,29 @@ const UserManagementScreen = ({ navigation }) => {
     });
   };
 
+  // FIX: Added proper null checks before using .toLowerCase()
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filter === 'all' || user.role === filter;
-    return matchesSearch && matchesFilter;
+    const searchTerm = searchQuery.toLowerCase();
+    const username = user?.name || '';
+    const email = user?.email || '';
+    const role = user?.role || '';
+    const userType = user?.userType || '';
+    
+    return (
+      username.toLowerCase().includes(searchTerm) ||
+      email.toLowerCase().includes(searchTerm) ||
+      role.toLowerCase().includes(searchTerm) ||
+      userType.toLowerCase().includes(searchTerm)
+    );
   });
+
+  // FIX: Safe key extractor to prevent undefined errors
+  const keyExtractor = (item, index) => {
+    if (!item) {
+      return `user-${index}-undefined-${Date.now()}`;
+    }
+    return item.id ? item.id.toString() : `user-${index}-${Date.now()}`;
+  };
 
   const getRoleColor = (role) => {
     switch (role) {
@@ -208,77 +224,97 @@ const UserManagementScreen = ({ navigation }) => {
     ));
   };
 
-  const UserCard = ({ user }) => (
-    <View style={styles.userCard}>
-      <View style={styles.userHeader}>
-        <View style={styles.userAvatar}>
-          <Text style={styles.avatarText}>
-            {user.name.split(' ').map(n => n[0]).join('')}
-          </Text>
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{user.name}</Text>
-          <Text style={styles.userEmail}>{user.email}</Text>
-        </View>
-        <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user.role) + '20' }]}>
-          <Text style={[styles.roleText, { color: getRoleColor(user.role) }]}>
-            {getRoleLabel(user.role)}
-          </Text>
-        </View>
-      </View>
+  // FIX: Added null safety checks to prevent the split error
+  const UserCard = ({ user }) => {
+    // Safely get initials with null checks
+    const getInitials = (name) => {
+      if (!name || typeof name !== 'string') return '?';
+      const parts = name.trim().split(' ').filter(Boolean);
+      if (parts.length === 0) return '?';
+      if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+      return parts.map(n => n.charAt(0).toUpperCase()).join('');
+    };
 
-      <View style={styles.userDetails}>
-        <View style={styles.detailItem}>
-          <Ionicons name="calendar" size={14} color="#64748b" />
-          <Text style={styles.detailText}>
-            Joined {new Date(user.joinDate).toLocaleDateString()}
-          </Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Ionicons name="ticket" size={14} color="#64748b" />
-          <Text style={styles.detailText}>
-            {user.eventsAttended} events attended
-          </Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Ionicons name="person" size={14} color="#64748b" />
-          <Text style={[styles.statusText, 
-            user.status === 'active' ? styles.statusActive : styles.statusInactive
-          ]}>
-            {user.status === 'active' ? 'Active' : 'Inactive'}
-          </Text>
-        </View>
-      </View>
+    // Ensure user object has all required properties
+    const userName = user?.name || 'Unknown User';
+    const userEmail = user?.email || 'No email';
+    const userRole = user?.role || 'customer';
+    const userStatus = user?.status || 'inactive';
+    const userJoinDate = user?.joinDate || new Date().toISOString();
+    const userEventsAttended = user?.eventsAttended || 0;
 
-      <View style={styles.userActions}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => {
-            setSelectedUser(user);
-            setShowRoleModal(true);
-          }}
-        >
-          <Ionicons name="shield" size={16} color="#6366f1" />
-          <Text style={styles.actionText}>Change Role</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.actionButton, user.status === 'active' ? styles.deactivateButton : styles.activateButton]}
-          onPress={() => handleStatusToggle(user.id)}
-        >
-          <Ionicons 
-            name={user.status === 'active' ? 'pause-circle' : 'play-circle'} 
-            size={16} 
-            color={user.status === 'active' ? '#ef4444' : '#10b981'} 
-          />
-          <Text style={[styles.actionText, 
-            user.status === 'active' ? styles.deactivateText : styles.activateText
-          ]}>
-            {user.status === 'active' ? 'Deactivate' : 'Activate'}
-          </Text>
-        </TouchableOpacity>
+    return (
+      <View style={styles.userCard}>
+        <View style={styles.userHeader}>
+          <View style={styles.userAvatar}>
+            <Text style={styles.avatarText}>
+              {getInitials(userName)}
+            </Text>
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>{userName}</Text>
+            <Text style={styles.userEmail}>{userEmail}</Text>
+          </View>
+          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(userRole) + '20' }]}>
+            <Text style={[styles.roleText, { color: getRoleColor(userRole) }]}>
+              {getRoleLabel(userRole)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.userDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="calendar" size={14} color="#64748b" />
+            <Text style={styles.detailText}>
+              Joined {new Date(userJoinDate).toLocaleDateString()}
+            </Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="ticket" size={14} color="#64748b" />
+            <Text style={styles.detailText}>
+              {userEventsAttended} events attended
+            </Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="person" size={14} color="#64748b" />
+            <Text style={[styles.statusText, 
+              userStatus === 'active' ? styles.statusActive : styles.statusInactive
+            ]}>
+              {userStatus === 'active' ? 'Active' : 'Inactive'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.userActions}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => {
+              setSelectedUser(user);
+              setShowRoleModal(true);
+            }}
+          >
+            <Ionicons name="shield" size={16} color="#6366f1" />
+            <Text style={styles.actionText}>Change Role</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionButton, userStatus === 'active' ? styles.deactivateButton : styles.activateButton]}
+            onPress={() => handleStatusToggle(user.id)}
+          >
+            <Ionicons 
+              name={userStatus === 'active' ? 'pause-circle' : 'play-circle'} 
+              size={16} 
+              color={userStatus === 'active' ? '#ef4444' : '#10b981'} 
+            />
+            <Text style={[styles.actionText, 
+              userStatus === 'active' ? styles.deactivateText : styles.activateText
+            ]}>
+              {userStatus === 'active' ? 'Deactivate' : 'Activate'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -293,15 +329,11 @@ const UserManagementScreen = ({ navigation }) => {
 
   return (
     <ScreenContainer>
-      {/* Header with Back Button */}
+      {/* Header without Back Button */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#1e293b" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>User Management</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>User Management</Text>
+        </View>
         <TouchableOpacity 
           style={styles.createUserButton}
           onPress={() => setShowCreateUserModal(true)}
@@ -343,7 +375,7 @@ const UserManagementScreen = ({ navigation }) => {
       <FlatList
         data={filteredUsers}
         renderItem={({ item }) => <UserCard user={item} />}
-        keyExtractor={item => item.id.toString()}
+        keyExtractor={keyExtractor}
         contentContainerStyle={styles.usersList}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -515,7 +547,7 @@ const UserManagementScreen = ({ navigation }) => {
                   <Text style={styles.modalUserEmail}>{selectedUser.email}</Text>
                 </View>
 
-                <Text style={styles.modalSectionTitle}>Select New Role</Text>
+                <Text style={styles.sectionTitle}>Select New Role</Text>
                 <View style={styles.roleOptions}>
                   {['customer', 'event_manager', 'support', 'admin'].map((role) => (
                     <TouchableOpacity
@@ -553,8 +585,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  backButton: {
-    padding: 8,
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
@@ -896,7 +929,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748b',
   },
-  modalSectionTitle: {
+  sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#64748b',

@@ -1,25 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-  ActivityIndicator,
-  RefreshControl,
-  Modal,
-} from 'react-native';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import axios from 'axios';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 const API_URL = 'http://localhost:3000';
 
-const HomeScreen = ({ navigation }) => {
+const DiscoverScreen = ({ navigation }) => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1334,4 +1334,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+export default DiscoverScreen;
