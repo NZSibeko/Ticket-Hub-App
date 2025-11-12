@@ -1,4 +1,4 @@
-// src/context/AuthContext.js - COMPLETE FIXED VERSION
+// src/context/AuthContext.js - FINAL COMPLETE & FIXED VERSION
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { createContext, useContext, useEffect, useState } from 'react';
@@ -11,7 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Store auth token separately for easy access
+  // Separate token for header use (prevents stale closure issues)
   const [authToken, setAuthToken] = useState(null);
 
   useEffect(() => {
@@ -20,243 +20,206 @@ export const AuthProvider = ({ children }) => {
 
   const checkExistingAuth = async () => {
     try {
-      console.log('🔐 Checking for existing authentication...');
+      console.log('Checking for existing authentication...');
       const [userData, storedToken] = await Promise.all([
         AsyncStorage.getItem('user'),
         AsyncStorage.getItem('token')
       ]);
 
-      console.log('📱 Stored user data:', userData);
-      console.log('🔑 Stored token found:', !!storedToken);
+      console.log('Stored user data:', userData);
+      console.log('Stored token found:', !!storedToken);
 
       if (userData && storedToken) {
         const parsedUser = JSON.parse(userData);
-        console.log('👤 Restoring user:', parsedUser);
-        
-        // Normalize role and userType to consistent format
-        if (parsedUser.role === 'event-manager' || parsedUser.userType === 'event-manager') {
-          parsedUser.role = 'event_manager';
-          parsedUser.userType = 'event_manager';
-        }
-        
-        // Ensure both role and userType are set consistently
-        if (!parsedUser.userType && parsedUser.role) {
-          parsedUser.userType = parsedUser.role;
-        }
-        if (!parsedUser.role && parsedUser.userType) {
-          parsedUser.role = parsedUser.userType;
-        }
-        
-        // Add display role if missing
+        console.log('Restoring user:', parsedUser);
+
+        // === ROLE NORMALIZATION: Force consistent format ===
+        const normalizeRole = (role) => {
+          if (!role) return null;
+          const r = role.toString().toLowerCase().trim();
+          if (['event-manager', 'event_manager', 'eventmanager'].includes(r)) return 'event_manager';
+          if (['admin', 'administrator', 'super_admin', 'superadmin', 'support'].includes(r)) return 'admin';
+          if (['customer', 'user'].includes(r)) return 'customer';
+          return r;
+        };
+
+        const normalizedRole = normalizeRole(parsedUser.role || parsedUser.userType);
+        parsedUser.role = normalizedRole;
+        parsedUser.userType = normalizedRole;
+
+        // Ensure displayRole
         if (!parsedUser.displayRole) {
-          parsedUser.displayRole = getDisplayRole(parsedUser.role || parsedUser.userType);
+          const roleMap = {
+            'event_manager': 'Event Manager',
+            'admin': 'Administrator',
+            'customer': 'Customer'
+          };
+          parsedUser.displayRole = roleMap[normalizedRole] || 'User';
         }
-        
+
         setUser(parsedUser);
         setToken(storedToken);
-        setAuthToken(storedToken); // Set the separate authToken variable
-        console.log('✅ User restored with role:', parsedUser.role, 'userType:', parsedUser.userType);
+        setAuthToken(storedToken);
+        console.log('User restored with role:', parsedUser.role);
       } else {
-        console.log('ℹ️ No existing authentication found');
+        console.log('No existing authentication found');
       }
     } catch (error) {
-      console.error('❌ Error checking auth:', error);
+      console.error('Error checking auth:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getDisplayRole = (role) => {
-    const roleMap = {
-      'event_manager': 'Event Manager',
-      'admin': 'Administrator',
-      'customer': 'Customer',
-      'SUPER_ADMIN': 'Super Admin',
-      'EVENT_MANAGER': 'Event Manager',
-      'SUPPORT': 'Support'
-    };
-    return roleMap[role] || 'User';
-  };
-
   const login = async (username, password) => {
     try {
-      console.log('🔐 Attempting login for:', username);
-      
-      // Try event manager login FIRST (since that's what you're testing)
+      console.log('Attempting login for:', username);
+
+      // === 1. Try Event Manager Login ===
       try {
-        console.log('💼 Trying event manager login...');
+        console.log('Trying event manager login...');
         const managerResponse = await axios.post(`${API_URL}/api/event-manager/auth/login`, {
           username,
           password
         });
 
         if (managerResponse.data.success) {
-          console.log('✅ Event manager login successful');
-          console.log('📦 Response data:', managerResponse.data);
-          
+          console.log('Event manager login successful');
           const userData = {
             ...managerResponse.data.user,
             role: 'event_manager',
             userType: 'event_manager',
             displayRole: 'Event Manager'
           };
-          
           const authToken = managerResponse.data.token;
-          
-          // Store in AsyncStorage
+
           await Promise.all([
             AsyncStorage.setItem('user', JSON.stringify(userData)),
             AsyncStorage.setItem('token', authToken)
           ]);
-          
-          // Update state
+
           setUser(userData);
           setToken(authToken);
-          setAuthToken(authToken); // Set the separate authToken variable
-          
-          console.log('✅ User data stored successfully');
-          console.log('✅ Token stored successfully');
-          
+          setAuthToken(authToken);
+
           return { success: true, user: userData, token: authToken };
         }
       } catch (managerError) {
-        console.log('❌ Event manager login failed:', managerError.response?.status);
-        if (managerError.response?.data) {
-          console.log('📄 Error details:', managerError.response.data);
-        }
+        console.log('Event manager login failed:', managerError.response?.status);
       }
 
-      // Try customer login
+      // === 2. Try Customer Login ===
       try {
-        console.log('👤 Trying customer login...');
+        console.log('Trying customer login...');
         const customerResponse = await axios.post(`${API_URL}/api/auth/login`, {
           username,
           password
         });
 
         if (customerResponse.data.success) {
-          console.log('✅ Customer login successful');
-          
+          console.log('Customer login successful');
           const userData = {
             ...customerResponse.data.user,
             role: 'customer',
             userType: 'customer',
             displayRole: 'Customer'
           };
-          
           const authToken = customerResponse.data.token;
-          
+
           await Promise.all([
             AsyncStorage.setItem('user', JSON.stringify(userData)),
             AsyncStorage.setItem('token', authToken)
           ]);
-          
+
           setUser(userData);
           setToken(authToken);
-          setAuthToken(authToken); // Set the separate authToken variable
-          
+          setAuthToken(authToken);
+
           return { success: true, user: userData, token: authToken };
         }
       } catch (customerError) {
-        console.log('❌ Customer login failed:', customerError.response?.status);
+        console.log('Customer login failed:', customerError.response?.status);
       }
 
-      // Try admin login
+      // === 3. Try Admin Login ===
       try {
-        console.log('👑 Trying admin login...');
+        console.log('Trying admin login...');
         const adminResponse = await axios.post(`${API_URL}/api/admin/auth/login`, {
           username,
           password
         });
 
         if (adminResponse.data.success) {
-          console.log('✅ Admin login successful');
-          
+          console.log('Admin login successful');
           const userData = {
             ...adminResponse.data.admin,
             role: adminResponse.data.admin.role || 'admin',
             userType: 'admin',
             displayRole: 'Administrator'
           };
-          
           const authToken = adminResponse.data.token;
-          
+
           await Promise.all([
             AsyncStorage.setItem('user', JSON.stringify(userData)),
             AsyncStorage.setItem('token', authToken)
           ]);
-          
+
           setUser(userData);
           setToken(authToken);
-          setAuthToken(authToken); // Set the separate authToken variable
-          
+          setAuthToken(authToken);
+
           return { success: true, user: userData, token: authToken };
         }
       } catch (adminError) {
-        console.log('❌ Admin login failed:', adminError.response?.status);
+        console.log('Admin login failed:', adminError.response?.status);
       }
 
-      // If all attempts fail
-      console.log('❌ All login attempts failed');
-      return { 
-        success: false, 
-        error: 'Invalid credentials. Please check your username and password.' 
+      // === All Failed ===
+      console.log('All login attempts failed');
+      return {
+        success: false,
+        error: 'Invalid credentials. Please check your username and password.'
       };
 
     } catch (error) {
-      console.error('💥 Login error:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'Login failed. Please try again.' 
+      console.error('Login error:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Login failed. Please try again.'
       };
     }
   };
 
   const logout = async () => {
     try {
-      console.log('🚪 Logging out user...');
+      console.log('Logging out user...');
       await Promise.all([
         AsyncStorage.removeItem('user'),
         AsyncStorage.removeItem('token')
       ]);
       setUser(null);
       setToken(null);
-      setAuthToken(null); // Clear the separate authToken variable
-      console.log('✅ Logout successful');
+      setAuthToken(null);
+      console.log('Logout successful');
     } catch (error) {
-      console.error('❌ Error during logout:', error);
+      console.error('Error during logout:', error);
     }
   };
 
-  // FIXED: Proper getAuthHeader function
+  // === SECURE & RELIABLE AUTH HEADER ===
   const getAuthHeader = () => {
-    try {
-      // Use the token from the separate authToken variable or from state
-      const currentToken = authToken || token;
-      
-      console.log('🔐 Getting auth header with token:', currentToken ? 'Token exists' : 'No token');
-      
-      if (!currentToken) {
-        console.log('❌ No token available for auth header');
-        return {
-          'Content-Type': 'application/json'
-        };
-      }
+    const currentToken = authToken || token;
+    console.log('Getting auth header - token exists:', !!currentToken);
 
-      // Ensure the token is properly formatted
-      const cleanToken = currentToken.replace(/^"(.*)"$/, '$1'); // Remove quotes if present
-      console.log('✅ Auth header created with token length:', cleanToken.length);
-      
-      return {
-        'Authorization': `Bearer ${cleanToken}`,
-        'Content-Type': 'application/json'
-      };
-    } catch (error) {
-      console.error('❌ Error in getAuthHeader:', error);
-      return {
-        'Content-Type': 'application/json'
-      };
+    if (!currentToken) {
+      return { 'Content-Type': 'application/json' };
     }
+
+    const cleanToken = currentToken.replace(/^"(.*)"$/, '$1');
+    return {
+      'Authorization': `Bearer ${cleanToken}`,
+      'Content-Type': 'application/json'
+    };
   };
 
   const updateUser = async (updatedUserData) => {
@@ -264,36 +227,37 @@ export const AuthProvider = ({ children }) => {
       const newUserData = { ...user, ...updatedUserData };
       await AsyncStorage.setItem('user', JSON.stringify(newUserData));
       setUser(newUserData);
-      console.log('✅ User data updated');
+      console.log('User data updated');
     } catch (error) {
-      console.error('❌ Error updating user:', error);
+      console.error('Error updating user:', error);
     }
   };
 
   const refreshAuth = async () => {
     try {
-      console.log('🔄 Refreshing authentication...');
+      console.log('Refreshing authentication...');
       await checkExistingAuth();
     } catch (error) {
-      console.error('❌ Error refreshing auth:', error);
+      console.error('Error refreshing auth:', error);
     }
   };
 
-  // Simplified and consistent role checking
+  // === ROLE CHECKS (CASE-INSENSITIVE) ===
   const hasAdminPrivileges = () => {
-    return user?.userType === 'admin' || user?.role === 'admin';
+    const role = user?.role?.toLowerCase();
+    return role === 'admin' || role === 'super_admin' || role === 'support';
   };
 
   const isEventManager = () => {
-    return user?.userType === 'event_manager' || user?.role === 'event_manager';
+    return user?.role?.toLowerCase() === 'event_manager';
   };
 
   const isAdmin = () => {
-    return user?.userType === 'admin' || user?.role === 'admin';
+    return hasAdminPrivileges();
   };
 
   const isCustomer = () => {
-    return user?.userType === 'customer' || user?.role === 'customer';
+    return user?.role?.toLowerCase() === 'customer';
   };
 
   const getUserRole = () => {
@@ -309,26 +273,26 @@ export const AuthProvider = ({ children }) => {
     user,
     token,
     isLoading,
-    authToken, // Export authToken for direct access
-    
+    authToken,
+
     // Actions
     login,
     logout,
     getAuthHeader,
     updateUser,
     refreshAuth,
-    
-    // Role checks
+
+    // Role Checks
     hasAdminPrivileges,
     isEventManager,
     isAdmin,
     isCustomer,
     getUserRole,
     isAuthenticated,
-    
-    // Convenience getters
+
+    // Convenience
     userRole: user?.role || user?.userType,
-    displayRole: user?.displayRole || getDisplayRole(user?.role || user?.userType),
+    displayRole: user?.displayRole || getUserRole(),
     username: user?.username || user?.email,
     userId: user?.manager_id || user?.customer_id || user?.admin_id,
   };

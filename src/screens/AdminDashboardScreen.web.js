@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -116,6 +116,14 @@ const AdminDashboardScreen = ({ navigation }) => {
   const [showKPIModal, setShowKPIModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [selectedManagerCard, setSelectedManagerCard] = useState(null);
+  const [showManagerModal, setShowManagerModal] = useState(false);
+
+  // Refs for horizontal scrolling
+  const managersScrollViewRef = useRef(null);
+  const [managersScrollPosition, setManagersScrollPosition] = useState(0);
+  const [canScrollManagersLeft, setCanScrollManagersLeft] = useState(false);
+  const [canScrollManagersRight, setCanScrollManagersRight] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
@@ -155,8 +163,9 @@ const AdminDashboardScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       
-      // Enhanced mock data
+      // CORRECTED mock data with proper structure that matches component expectations
       const mockStats = {
+        // Original dashboard data
         totalEvents: 45,
         totalTickets: 1250,
         totalRevenue: 187500,
@@ -178,6 +187,8 @@ const AdminDashboardScreen = ({ navigation }) => {
         customerGrowth: 15.8,
         ticketSales: [120, 190, 300, 500, 200, 300, 450, 320, 280, 410, 380, 520],
         revenueData: [15000, 30000, 45000, 60000, 75000, 90000, 112500, 98000, 85000, 110000, 105000, 125000],
+        
+        // Event Performance data (this was already working)
         eventPerformance: [
           { 
             id: 1,
@@ -236,7 +247,217 @@ const AdminDashboardScreen = ({ navigation }) => {
             peakAttendance: 250,
             utilization: 80
           },
+          { 
+            id: 4,
+            name: 'Art Gallery Opening', 
+            sold: 180, 
+            capacity: 200, 
+            revenue: 27000,
+            scanned: 165,
+            date: '2024-11-15',
+            location: 'Theater',
+            category: 'Arts',
+            ticketTypes: [
+              { name: 'VIP', price: 200, sold: 30 },
+              { name: 'Standard', price: 150, sold: 150 }
+            ],
+            attendanceRate: 91.7,
+            revenuePerAttendee: 163.6,
+            peakAttendance: 140,
+            utilization: 90
+          }
         ],
+        
+        // NEW: Manager Analytics Data - Properly structured
+        managerAnalytics: {
+          topPerformingManagers: [
+            {
+              id: 1,
+              name: 'Sarah Johnson',
+              eventsManaged: 8,
+              totalRevenue: 85000,
+              attendanceRate: 92.5,
+              customerRating: 4.8,
+              ticketsSold: 650,
+              efficiency: 95,
+              upcomingEvents: 3,
+              completedEvents: 5,
+              revenueGrowth: 15.2,
+              favoriteVenue: 'Convention Center',
+              specialization: 'Tech Conferences'
+            },
+            {
+              id: 2,
+              name: 'Mike Chen',
+              eventsManaged: 6,
+              totalRevenue: 72000,
+              attendanceRate: 88.3,
+              customerRating: 4.6,
+              ticketsSold: 580,
+              efficiency: 89,
+              upcomingEvents: 2,
+              completedEvents: 4,
+              revenueGrowth: 12.8,
+              favoriteVenue: 'City Park',
+              specialization: 'Music Festivals'
+            },
+            {
+              id: 3,
+              name: 'Emily Davis',
+              eventsManaged: 7,
+              totalRevenue: 68000,
+              attendanceRate: 91.2,
+              customerRating: 4.9,
+              ticketsSold: 520,
+              efficiency: 93,
+              upcomingEvents: 4,
+              completedEvents: 3,
+              revenueGrowth: 18.5,
+              favoriteVenue: 'Exhibition Hall',
+              specialization: 'Food & Beverage'
+            },
+            {
+              id: 4,
+              name: 'David Wilson',
+              eventsManaged: 5,
+              totalRevenue: 55000,
+              attendanceRate: 89.7,
+              customerRating: 4.7,
+              ticketsSold: 420,
+              efficiency: 87,
+              upcomingEvents: 2,
+              completedEvents: 3,
+              revenueGrowth: 10.3,
+              favoriteVenue: 'Stadium',
+              specialization: 'Sports Events'
+            },
+            {
+              id: 5,
+              name: 'Lisa Rodriguez',
+              eventsManaged: 9,
+              totalRevenue: 78000,
+              attendanceRate: 94.2,
+              customerRating: 4.8,
+              ticketsSold: 610,
+              efficiency: 91,
+              upcomingEvents: 4,
+              completedEvents: 5,
+              revenueGrowth: 16.7,
+              favoriteVenue: 'Convention Center',
+              specialization: 'Business Conferences'
+            }
+          ],
+          
+          marketingPerformance: [
+            {
+              channel: 'Social Media',
+              budget: 5000,
+              revenue: 45000,
+              roi: 800,
+              clicks: 12500,
+              conversions: 1062,
+              conversionRate: 8.5
+            },
+            {
+              channel: 'Email Marketing',
+              budget: 2000,
+              revenue: 28000,
+              roi: 1300,
+              clicks: 3200,
+              conversions: 390,
+              conversionRate: 12.2
+            },
+            {
+              channel: 'Paid Ads',
+              budget: 8000,
+              revenue: 65000,
+              roi: 713,
+              clicks: 18500,
+              conversions: 1258,
+              conversionRate: 6.8
+            },
+            {
+              channel: 'Partnerships',
+              budget: 3000,
+              revenue: 22000,
+              roi: 633,
+              clicks: 2800,
+              conversions: 255,
+              conversionRate: 9.1
+            }
+          ],
+          
+          venueUtilization: [
+            {
+              name: 'Convention Center',
+              capacity: 5000,
+              utilized: 4200,
+              utilizationRate: 84,
+              eventsHosted: 15,
+              revenue: 125000
+            },
+            {
+              name: 'City Park',
+              capacity: 10000,
+              utilized: 8500,
+              utilizationRate: 85,
+              eventsHosted: 8,
+              revenue: 98000
+            },
+            {
+              name: 'Exhibition Hall',
+              capacity: 2000,
+              utilized: 1800,
+              utilizationRate: 90,
+              eventsHosted: 12,
+              revenue: 75000
+            },
+            {
+              name: 'Stadium',
+              capacity: 15000,
+              utilized: 12000,
+              utilizationRate: 80,
+              eventsHosted: 5,
+              revenue: 145000
+            }
+          ],
+          
+          eventTypePerformance: [
+            {
+              type: 'Music Festivals',
+              events: 12,
+              revenue: 145000,
+              attendance: 85.5,
+              avgTicketPrice: 120,
+              satisfaction: 4.6
+            },
+            {
+              type: 'Tech Conferences',
+              events: 8,
+              revenue: 98000,
+              attendance: 88.2,
+              avgTicketPrice: 180,
+              satisfaction: 4.8
+            },
+            {
+              type: 'Food & Beverage',
+              events: 10,
+              revenue: 75000,
+              attendance: 82.1,
+              avgTicketPrice: 90,
+              satisfaction: 4.9
+            },
+            {
+              type: 'Arts & Culture',
+              events: 6,
+              revenue: 45000,
+              attendance: 78.9,
+              avgTicketPrice: 60,
+              satisfaction: 4.7
+            }
+          ]
+        },
+        
         kpiDetails: {
           revenue: {
             title: 'Revenue Analytics',
@@ -320,6 +541,35 @@ const AdminDashboardScreen = ({ navigation }) => {
     }
   };
 
+  // Navigation functions for managers section
+  const scrollManagersLeft = () => {
+    if (managersScrollViewRef.current) {
+      managersScrollViewRef.current.scrollTo({
+        x: managersScrollPosition - 300,
+        animated: true
+      });
+    }
+  };
+
+  const scrollManagersRight = () => {
+    if (managersScrollViewRef.current) {
+      managersScrollViewRef.current.scrollTo({
+        x: managersScrollPosition + 300,
+        animated: true
+      });
+    }
+  };
+
+  const handleManagersScroll = (event) => {
+    const position = event.nativeEvent.contentOffset.x;
+    const contentWidth = event.nativeEvent.contentSize.width;
+    const layoutWidth = event.nativeEvent.layoutMeasurement.width;
+    
+    setManagersScrollPosition(position);
+    setCanScrollManagersLeft(position > 0);
+    setCanScrollManagersRight(position < contentWidth - layoutWidth - 10);
+  };
+
   const KPICard = ({ title, value, change, color, icon, description, onPress }) => (
     <TouchableOpacity 
       style={styles.kpiCard}
@@ -385,6 +635,190 @@ const AdminDashboardScreen = ({ navigation }) => {
       <Text style={styles.quickStatValue}>{value}</Text>
       {subtitle && <Text style={styles.quickStatSubtitle}>{subtitle}</Text>}
     </View>
+  );
+
+  // Manager Analytics Cards - Using the nested managerAnalytics structure
+  const ManagerPerformanceCard = ({ manager, onPress }) => (
+    <TouchableOpacity 
+      style={styles.managerCard}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.managerHeader}>
+        <View style={styles.managerAvatar}>
+          <Text style={styles.managerAvatarText}>
+            {manager.name.split(' ').map(n => n[0]).join('')}
+          </Text>
+        </View>
+        <View style={styles.managerInfo}>
+          <Text style={styles.managerName}>{manager.name}</Text>
+          <Text style={styles.managerRole}>Event Manager</Text>
+        </View>
+        <View style={styles.managerRating}>
+          <Ionicons name="star" size={16} color="#f59e0b" />
+          <Text style={styles.ratingText}>{manager.customerRating}</Text>
+        </View>
+      </View>
+
+      <View style={styles.managerStats}>
+        <View style={styles.managerStat}>
+          <Text style={styles.managerStatValue}>R{(manager.totalRevenue / 1000).toFixed(0)}k</Text>
+          <Text style={styles.managerStatLabel}>Revenue</Text>
+        </View>
+        <View style={styles.managerStat}>
+          <Text style={styles.managerStatValue}>{manager.efficiency}%</Text>
+          <Text style={styles.managerStatLabel}>Efficiency</Text>
+        </View>
+        <View style={styles.managerStat}>
+          <Text style={styles.managerStatValue}>{manager.eventsManaged}</Text>
+          <Text style={styles.managerStatLabel}>Events</Text>
+        </View>
+      </View>
+
+      <View style={styles.performanceBar}>
+        <View 
+          style={[
+            styles.performanceFill,
+            { width: `${manager.attendanceRate}%`, backgroundColor: manager.attendanceRate > 90 ? '#10b981' : '#f59e0b' }
+          ]} 
+        />
+      </View>
+      <Text style={styles.performanceText}>
+        Attendance Rate: {manager.attendanceRate}%
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const MarketingChannelCard = ({ channel, data, onPress }) => (
+    <TouchableOpacity 
+      style={styles.marketingCard}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.marketingHeader}>
+        <View style={styles.channelIcon}>
+          <Ionicons 
+            name={
+              channel === 'Social Media' ? 'share-social' :
+              channel === 'Email Marketing' ? 'mail' :
+              channel === 'Paid Ads' ? 'megaphone' :
+              channel === 'Partnerships' ? 'business' : 'search'
+            } 
+            size={20} 
+            color="#6366f1" 
+          />
+        </View>
+        <Text style={styles.channelName}>{channel}</Text>
+      </View>
+      
+      <View style={styles.marketingStats}>
+        <View style={styles.marketingStat}>
+          <Text style={styles.marketingStatValue}>{data.roi}%</Text>
+          <Text style={styles.marketingStatLabel}>ROI</Text>
+        </View>
+        <View style={styles.marketingStat}>
+          <Text style={styles.marketingStatValue}>R{(data.revenue / 1000).toFixed(0)}k</Text>
+          <Text style={styles.marketingStatLabel}>Revenue</Text>
+        </View>
+      </View>
+      
+      <View style={styles.conversionBadge}>
+        <Text style={styles.conversionText}>
+          {data.conversionRate}% Conversion
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const VenueUtilizationCard = ({ venue, data, onPress }) => (
+    <TouchableOpacity 
+      style={styles.venueCard}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.venueHeader}>
+        <Ionicons name="business" size={20} color="#6366f1" />
+        <Text style={styles.venueName}>{venue}</Text>
+      </View>
+      
+      <View style={styles.venueStats}>
+        <View style={styles.venueStat}>
+          <Text style={styles.venueStatValue}>{data.utilized.toLocaleString()}</Text>
+          <Text style={styles.venueStatLabel}>Attended</Text>
+        </View>
+        <View style={styles.venueStat}>
+          <Text style={styles.venueStatValue}>{data.capacity.toLocaleString()}</Text>
+          <Text style={styles.venueStatLabel}>Capacity</Text>
+        </View>
+      </View>
+      
+      <View style={styles.utilizationBar}>
+        <View 
+          style={[
+            styles.utilizationFill,
+            { 
+              width: `${data.utilizationRate}%`,
+              backgroundColor: data.utilizationRate > 85 ? '#10b981' : data.utilizationRate > 75 ? '#f59e0b' : '#ef4444'
+            }
+          ]} 
+        />
+      </View>
+      <Text style={styles.utilizationText}>
+        Utilization: {data.utilizationRate}%
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const EventTypePerformanceCard = ({ eventType, data, onPress }) => (
+    <TouchableOpacity 
+      style={styles.eventTypeCard}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.eventTypeHeader}>
+        <View style={[
+          styles.eventTypeIcon,
+          { backgroundColor: 
+            eventType === 'Music Festivals' ? '#ec4899' + '20' :
+            eventType === 'Tech Conferences' ? '#6366f1' + '20' :
+            eventType === 'Food & Beverage' ? '#f59e0b' + '20' :
+            eventType === 'Arts & Culture' ? '#8b5cf6' + '20' : '#10b981' + '20'
+          }
+        ]}>
+          <Ionicons 
+            name={
+              eventType === 'Music Festivals' ? 'musical-notes' :
+              eventType === 'Tech Conferences' ? 'laptop' :
+              eventType === 'Food & Beverage' ? 'restaurant' :
+              eventType === 'Arts & Culture' ? 'color-palette' : 'business'
+            } 
+            size={16} 
+            color={
+              eventType === 'Music Festivals' ? '#ec4899' :
+              eventType === 'Tech Conferences' ? '#6366f1' :
+              eventType === 'Food & Beverage' ? '#f59e0b' :
+              eventType === 'Arts & Culture' ? '#8b5cf6' : '#10b981'
+            } 
+          />
+        </View>
+        <Text style={styles.eventTypeName}>{eventType}</Text>
+      </View>
+      
+      <View style={styles.eventTypeStats}>
+        <View style={styles.eventTypeStat}>
+          <Text style={styles.eventTypeStatValue}>{data.events}</Text>
+          <Text style={styles.eventTypeStatLabel}>Events</Text>
+        </View>
+        <View style={styles.eventTypeStat}>
+          <Text style={styles.eventTypeStatValue}>R{(data.revenue / 1000).toFixed(0)}k</Text>
+          <Text style={styles.eventTypeStatLabel}>Revenue</Text>
+        </View>
+        <View style={styles.eventTypeStat}>
+          <Text style={styles.eventTypeStatValue}>{data.attendance}%</Text>
+          <Text style={styles.eventTypeStatLabel}>Attendance</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 
   const renderKPIModal = () => {
@@ -487,6 +921,176 @@ const AdminDashboardScreen = ({ navigation }) => {
                         <Text style={styles.insightText}>{insight}</Text>
                       </View>
                     ))}
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderManagerModal = () => {
+    if (!selectedManagerCard || !stats?.managerAnalytics) return null;
+    
+    return (
+      <Modal
+        visible={showManagerModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowManagerModal(false)}
+      >
+        <View style={styles.fullModalOverlay}>
+          <View style={styles.fullModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {selectedManagerCard.type === 'manager' ? `${selectedManagerCard.name} - Performance Details` :
+                 selectedManagerCard.type === 'marketing' ? `${selectedManagerCard.channel} Marketing Analytics` :
+                 selectedManagerCard.type === 'venue' ? `${selectedManagerCard.venue} Utilization Details` :
+                 `${selectedManagerCard.eventType} Performance Analytics`}
+              </Text>
+              <TouchableOpacity onPress={() => setShowManagerModal(false)}>
+                <Ionicons name="close" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.fullModalScroll}>
+              {selectedManagerCard.type === 'manager' && (
+                <View style={styles.managerDetailSection}>
+                  <View style={styles.detailHeader}>
+                    <View style={styles.detailAvatar}>
+                      <Text style={styles.detailAvatarText}>
+                        {selectedManagerCard.name.split(' ').map(n => n[0]).join('')}
+                      </Text>
+                    </View>
+                    <View style={styles.detailInfo}>
+                      <Text style={styles.detailName}>{selectedManagerCard.name}</Text>
+                      <Text style={styles.detailSpecialization}>{selectedManagerCard.specialization}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailStats}>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>R{selectedManagerCard.totalRevenue.toLocaleString()}</Text>
+                        <Text style={styles.detailStatLabel}>Total Revenue</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.eventsManaged}</Text>
+                        <Text style={styles.detailStatLabel}>Events Managed</Text>
+                      </View>
+                    </View>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.attendanceRate}%</Text>
+                        <Text style={styles.detailStatLabel}>Avg Attendance</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.efficiency}%</Text>
+                        <Text style={styles.detailStatLabel}>Efficiency</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.insightsList}>
+                    <Text style={styles.sectionSubtitle}>Performance Insights</Text>
+                    <View style={styles.insightItem}>
+                      <Ionicons name="trending-up" size={16} color="#10b981" />
+                      <Text style={styles.insightText}>Revenue growth: +{selectedManagerCard.revenueGrowth}% this quarter</Text>
+                    </View>
+                    <View style={styles.insightItem}>
+                      <Ionicons name="star" size={16} color="#f59e0b" />
+                      <Text style={styles.insightText}>Customer rating: {selectedManagerCard.customerRating}/5.0</Text>
+                    </View>
+                    <View style={styles.insightItem}>
+                      <Ionicons name="business" size={16} color="#6366f1" />
+                      <Text style={styles.insightText}>Favorite venue: {selectedManagerCard.favoriteVenue}</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {selectedManagerCard.type === 'marketing' && (
+                <View style={styles.managerDetailSection}>
+                  <Text style={styles.sectionSubtitle}>Channel Performance Details</Text>
+                  <View style={styles.detailStats}>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>R{selectedManagerCard.data.revenue.toLocaleString()}</Text>
+                        <Text style={styles.detailStatLabel}>Revenue Generated</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>R{selectedManagerCard.data.budget.toLocaleString()}</Text>
+                        <Text style={styles.detailStatLabel}>Marketing Budget</Text>
+                      </View>
+                    </View>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.data.roi}%</Text>
+                        <Text style={styles.detailStatLabel}>Return on Investment</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.data.conversionRate}%</Text>
+                        <Text style={styles.detailStatLabel}>Conversion Rate</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {selectedManagerCard.type === 'venue' && (
+                <View style={styles.managerDetailSection}>
+                  <Text style={styles.sectionSubtitle}>Venue Utilization Analytics</Text>
+                  <View style={styles.detailStats}>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.data.utilizationRate}%</Text>
+                        <Text style={styles.detailStatLabel}>Utilization Rate</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.data.eventsHosted}</Text>
+                        <Text style={styles.detailStatLabel}>Events Hosted</Text>
+                      </View>
+                    </View>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.data.utilized.toLocaleString()}</Text>
+                        <Text style={styles.detailStatLabel}>Total Attendees</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>R{selectedManagerCard.data.revenue.toLocaleString()}</Text>
+                        <Text style={styles.detailStatLabel}>Venue Revenue</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {selectedManagerCard.type === 'eventType' && (
+                <View style={styles.managerDetailSection}>
+                  <Text style={styles.sectionSubtitle}>Event Type Performance Details</Text>
+                  <View style={styles.detailStats}>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.data.events}</Text>
+                        <Text style={styles.detailStatLabel}>Total Events</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>R{selectedManagerCard.data.revenue.toLocaleString()}</Text>
+                        <Text style={styles.detailStatLabel}>Total Revenue</Text>
+                      </View>
+                    </View>
+                    <View style={styles.detailStatRow}>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>{selectedManagerCard.data.attendance}%</Text>
+                        <Text style={styles.detailStatLabel}>Avg Attendance</Text>
+                      </View>
+                      <View style={styles.detailStat}>
+                        <Text style={styles.detailStatValue}>R{selectedManagerCard.data.avgTicketPrice}</Text>
+                        <Text style={styles.detailStatLabel}>Avg Ticket Price</Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
               )}
@@ -634,6 +1238,61 @@ const AdminDashboardScreen = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Manager Performance Section - CORRECTED DATA ACCESS WITH NAVIGATION ARROWS */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Top Performing Managers</Text>
+            <View style={styles.navigationControls}>
+              <TouchableOpacity 
+                style={[styles.navButton, !canScrollManagersLeft && styles.navButtonDisabled]}
+                onPress={scrollManagersLeft}
+                disabled={!canScrollManagersLeft}
+              >
+                <Ionicons 
+                  name="chevron-back" 
+                  size={20} 
+                  color={canScrollManagersLeft ? "#6366f1" : "#cbd5e1"} 
+                />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.navButton, !canScrollManagersRight && styles.navButtonDisabled]}
+                onPress={scrollManagersRight}
+                disabled={!canScrollManagersRight}
+              >
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={20} 
+                  color={canScrollManagersRight ? "#6366f1" : "#cbd5e1"} 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          <View style={styles.scrollContainer}>
+            <ScrollView 
+              ref={managersScrollViewRef}
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalScroll}
+              onScroll={handleManagersScroll}
+              scrollEventThrottle={16}
+            >
+              <View style={styles.managersGrid}>
+                {stats?.managerAnalytics?.topPerformingManagers?.map((manager) => (
+                  <ManagerPerformanceCard
+                    key={manager.id}
+                    manager={manager}
+                    onPress={() => {
+                      setSelectedManagerCard({ type: 'manager', ...manager });
+                      setShowManagerModal(true);
+                    }}
+                  />
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+
         {/* Sales Analytics */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sales Analytics</Text>
@@ -680,7 +1339,28 @@ const AdminDashboardScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Event Performance */}
+        {/* Marketing Performance Section - CORRECTED DATA ACCESS */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Marketing Channel Performance</Text>
+            <Text style={styles.sectionSubtitle}>ROI and conversion rates</Text>
+          </View>
+          <View style={styles.marketingGrid}>
+            {stats?.managerAnalytics?.marketingPerformance?.map((channelData) => (
+              <MarketingChannelCard
+                key={channelData.channel}
+                channel={channelData.channel}
+                data={channelData}
+                onPress={() => {
+                  setSelectedManagerCard({ type: 'marketing', channel: channelData.channel, data: channelData });
+                  setShowManagerModal(true);
+                }}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Event Performance - CORRECTED DATA ACCESS */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Event Performance</Text>
@@ -782,6 +1462,48 @@ const AdminDashboardScreen = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Venue Utilization Section - CORRECTED DATA ACCESS */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Venue Utilization</Text>
+            <Text style={styles.sectionSubtitle}>Capacity and attendance analysis</Text>
+          </View>
+          <View style={styles.venuesGrid}>
+            {stats?.managerAnalytics?.venueUtilization?.map((venueData) => (
+              <VenueUtilizationCard
+                key={venueData.name}
+                venue={venueData.name}
+                data={venueData}
+                onPress={() => {
+                  setSelectedManagerCard({ type: 'venue', venue: venueData.name, data: venueData });
+                  setShowManagerModal(true);
+                }}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Event Type Performance Section - CORRECTED DATA ACCESS */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Event Type Performance</Text>
+            <Text style={styles.sectionSubtitle}>Revenue and attendance by category</Text>
+          </View>
+          <View style={styles.eventTypesGrid}>
+            {stats?.managerAnalytics?.eventTypePerformance?.map((eventTypeData) => (
+              <EventTypePerformanceCard
+                key={eventTypeData.type}
+                eventType={eventTypeData.type}
+                data={eventTypeData}
+                onPress={() => {
+                  setSelectedManagerCard({ type: 'eventType', eventType: eventTypeData.type, data: eventTypeData });
+                  setShowManagerModal(true);
+                }}
+              />
+            ))}
+          </View>
+        </View>
+
         {/* Quick Statistics */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -823,6 +1545,7 @@ const AdminDashboardScreen = ({ navigation }) => {
 
       {/* Render modals */}
       {renderKPIModal()}
+      {renderManagerModal()}
     </ScreenContainer>
   );
 };
@@ -911,6 +1634,27 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 12,
     color: '#64748b',
+  },
+  navigationControls: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  navButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  navButtonDisabled: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#f1f5f9',
+  },
+  scrollContainer: {
+    position: 'relative',
   },
   liveIndicator: {
     flexDirection: 'row',
@@ -1404,6 +2148,354 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#92400e',
     lineHeight: 20,
+  },
+
+  // Manager Analytics Styles
+  horizontalScroll: {
+    marginHorizontal: -16,
+  },
+  managersGrid: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingHorizontal: 16,
+  },
+  managerCard: {
+    width: 280,
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 2px 8px rgba(0,0,0,0.06)',
+    elevation: 2,
+  },
+  managerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  managerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#6366f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  managerAvatarText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  managerInfo: {
+    flex: 1,
+  },
+  managerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  managerRole: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  managerRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  managerStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  managerStat: {
+    alignItems: 'center',
+  },
+  managerStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  managerStatLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  performanceBar: {
+    height: 6,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 3,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  performanceFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  performanceText: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+
+  // Marketing Cards
+  marketingGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  marketingCard: {
+    width: (width - 56) / 2,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 1px 3px rgba(0,0,0,0.05)',
+    elevation: 1,
+  },
+  marketingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  channelIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#6366f1' + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  channelName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  marketingStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+  },
+  marketingStat: {
+    flex: 1,
+  },
+  marketingStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  marketingStatLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  conversionBadge: {
+    backgroundColor: '#f0f9ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  conversionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0369a1',
+  },
+
+  // Venue Cards
+  venuesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  venueCard: {
+    width: (width - 56) / 2,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 1px 3px rgba(0,0,0,0.05)',
+    elevation: 1,
+  },
+  venueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  venueName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  venueStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+  },
+  venueStat: {
+    flex: 1,
+  },
+  venueStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  venueStatLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  utilizationBar: {
+    height: 6,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 3,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  utilizationFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  utilizationText: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+
+  // Event Type Cards
+  eventTypesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  eventTypeCard: {
+    width: (width - 56) / 2,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    boxShadow: '0px 1px 3px rgba(0,0,0,0.05)',
+    elevation: 1,
+  },
+  eventTypeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  eventTypeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eventTypeName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  eventTypeStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  eventTypeStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  eventTypeStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  eventTypeStatLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Manager Detail Section
+  managerDetailSection: {
+    marginBottom: 24,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  detailAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#6366f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  detailAvatarText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 20,
+  },
+  detailInfo: {
+    flex: 1,
+  },
+  detailName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  detailSpecialization: {
+    fontSize: 16,
+    color: '#64748b',
+  },
+  detailStats: {
+    gap: 16,
+    marginBottom: 20,
+  },
+  detailStatRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  detailStat: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  detailStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  detailStatLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
 

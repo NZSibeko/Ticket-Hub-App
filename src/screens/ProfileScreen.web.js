@@ -93,16 +93,21 @@ const ProfileScreen = ({ navigation }) => {
     }
   }, [user]);
 
+  // === CASE-INSENSITIVE ROLE CHECKS ===
   const isAdmin = () => {
-    return user && (user.role === 'admin' || user.role === 'event_manager');
+    if (!user?.role) return false;
+    const role = user.role.toLowerCase();
+    return role === 'admin' || role === 'event_manager' || role === 'super_admin' || role === 'support' || role === 'superhero';
   };
 
   const isEventManager = () => {
-    return user && user.role === 'event_manager';
+    if (!user?.role) return false;
+    return user.role.toLowerCase() === 'event_manager';
   };
 
   const isCustomer = () => {
-    return user && user.role === 'customer';
+    if (!user?.role) return false;
+    return user.role.toLowerCase() === 'customer';
   };
 
   const getUserDisplayName = () => {
@@ -634,16 +639,15 @@ const ProfileScreen = ({ navigation }) => {
   const getAdminRoleDisplay = () => {
     if (!user || !isAdmin()) return 'Administrator';
     
-    switch (user.role) {
-      case 'SUPER_ADMIN':
+    const role = user.role.toLowerCase();
+    switch (role) {
+      case 'super_admin':
         return 'Super Administrator';
-      case 'EVENT_MANAGER':
-        return 'Event Manager';
       case 'event_manager':
         return 'Event Manager';
-      case 'SUPPORT':
+      case 'support':
         return 'Support Team';
-      case 'SUPERHERO':
+      case 'superhero':
         return 'Superhero';
       case 'admin':
         return 'Administrator';
@@ -1301,7 +1305,6 @@ const ProfileScreen = ({ navigation }) => {
             {/* Support Section */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Support</Text>
-              
               <SupportCard
                 icon="help-circle-outline"
                 title="Help Center"
@@ -1309,7 +1312,6 @@ const ProfileScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('HelpCenter')}
                 color="#6366f1"
               />
-              
               <SupportCard
                 icon="document-text-outline"
                 title="Terms & Conditions"
@@ -1317,7 +1319,6 @@ const ProfileScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('TermsConditions')}
                 color="#10b981"
               />
-              
               <SupportCard
                 icon="information-circle-outline"
                 title="About"
@@ -1353,9 +1354,9 @@ const ProfileScreen = ({ navigation }) => {
             <View style={styles.profileInfo}>
               <Text style={styles.userName}>{getUserDisplayName()}</Text>
               
-              {/* Role Badge */}
-              <View style={styles.roleBadgeContainer}>
-                {isAdmin() && (
+              {/* Role Badge - Always show for admin users */}
+              {isAdmin() && (
+                <View style={styles.roleBadgeContainer}>
                   <View style={[
                     styles.roleBadge, 
                     isEventManager() ? styles.eventManagerBadge : styles.adminBadge
@@ -1367,25 +1368,22 @@ const ProfileScreen = ({ navigation }) => {
                     />
                     <Text style={styles.roleBadgeText}>{getAdminRoleDisplay()}</Text>
                   </View>
-                )}
-                {isCustomer() && (
+                </View>
+              )}
+              
+              {/* Customer badge for non-admin users */}
+              {isCustomer() && (
+                <View style={styles.roleBadgeContainer}>
                   <View style={[styles.roleBadge, styles.customerBadge]}>
                     <Ionicons name="person" size={scaleFont(10)} color="#fff" />
                     <Text style={styles.roleBadgeText}>Customer</Text>
                   </View>
-                )}
-              </View>
-
-              <TouchableOpacity 
-                style={styles.editProfileButton}
-                onPress={handleEditProfilePress}
-              >
-                <Ionicons name="create-outline" size={scaleFont(14)} color="#6366f1" />
-                <Text style={styles.editProfileText}>Edit Profile</Text>
-              </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
 
+          {/* Rest of the code remains unchanged */}
           {/* My Account Section - For customers only */}
           {isCustomer() && (
             <View style={styles.section}>

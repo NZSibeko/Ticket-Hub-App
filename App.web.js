@@ -6,7 +6,6 @@ import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 
-// Import screens directly
 import AdminDashboardScreen from './src/screens/AdminDashboardScreen.web';
 import AdminToolsDashboard from './src/screens/AdminToolsDashboard.web';
 import CreateEventScreen from './src/screens/CreateEventScreen.web';
@@ -74,230 +73,179 @@ const LoadingFallback = () => (
   </View>
 );
 
-// Fixed Tab Container
 const TabContainer = ({ children }) => (
   <View style={styles.tabContainer}>
     {children}
   </View>
 );
 
-// Customer Tabs Navigator - Browse Events, Discover, My Tickets, Profile
-const CustomerTabs = () => {
-  return (
-    <TabContainer>
-      <TopTab.Navigator
-        screenOptions={{
-          tabBarStyle: [styles.tabBar, styles.fixedTabBar],
-          tabBarActiveTintColor: '#6366f1',
-          tabBarInactiveTintColor: '#6b7280',
-          tabBarLabelStyle: styles.tabLabel,
-          tabBarIndicatorStyle: styles.tabIndicator,
-          tabBarShowIcon: true,
-          tabBarIconStyle: styles.tabIcon,
+const CustomerTabs = () => (
+  <TabContainer>
+    <TopTab.Navigator
+      screenOptions={{
+        tabBarStyle: [styles.tabBar, styles.fixedTabBar],
+        tabBarActiveTintColor: '#6366f1',
+        tabBarInactiveTintColor: '#6b7280',
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIndicatorStyle: styles.tabIndicator,
+        tabBarShowIcon: true,
+        tabBarIconStyle: styles.tabIcon,
+      }}
+    >
+      <TopTab.Screen 
+        name="BrowseEvents" 
+        component={SearchEventsScreen}
+        options={{ 
+          title: 'Browse Events',
+          tabBarIcon: ({ color }) => <Ionicons name="search" size={20} color={color} />
         }}
-        sceneContainerStyle={{
-          pointerEvents: 'auto',
+      />
+      <TopTab.Screen 
+        name="Discover" 
+        component={DiscoverScreen}
+        options={{ 
+          title: 'Discover',
+          tabBarIcon: ({ color }) => <Ionicons name="calendar" size={20} color={color} />
         }}
-      >
-        <TopTab.Screen 
-          name="BrowseEvents" 
-          component={SearchEventsScreen}
-          options={{ 
-            title: 'Browse Events',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="search" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Discover" 
-          component={DiscoverScreen}
-          options={{ 
-            title: 'Discover',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="calendar" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="MyTickets" 
-          component={MyTicketsScreen}
-          options={{ 
-            title: 'My Tickets',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="ticket" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Profile" 
-          component={ProfileScreen}
-          options={{ 
-            title: 'Profile',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="person" size={20} color={color} />
-            ),
-          }}
-        />
-      </TopTab.Navigator>
-    </TabContainer>
-  );
-};
+      />
+      <TopTab.Screen 
+        name="MyTickets" 
+        component={MyTicketsScreen}
+        options={{ 
+          title: 'My Tickets',
+          tabBarIcon: ({ color }) => <Ionicons name="ticket" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{ 
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />
+        }}
+      />
+    </TopTab.Navigator>
+  </TabContainer>
+);
 
-// Admin Tabs Navigator - Admin Tools Dashboard, Events, Users, Profile
-const AdminTabs = () => {
-  return (
-    <TabContainer>
-      <TopTab.Navigator
-        screenOptions={{
-          tabBarStyle: [styles.tabBar, styles.fixedTabBar],
-          tabBarActiveTintColor: '#6366f1',
-          tabBarInactiveTintColor: '#6b7280',
-          tabBarLabelStyle: styles.tabLabel,
-          tabBarIndicatorStyle: styles.tabIndicator,
-          tabBarShowIcon: true,
-          tabBarIconStyle: styles.tabIcon,
+const AdminTabs = () => (
+  <TabContainer>
+    <TopTab.Navigator
+      screenOptions={{
+        tabBarStyle: [styles.tabBar, styles.fixedTabBar],
+        tabBarActiveTintColor: '#6366f1',
+        tabBarInactiveTintColor: '#6b7280',
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIndicatorStyle: styles.tabIndicator,
+        tabBarShowIcon: true,
+        tabBarIconStyle: styles.tabIcon,
+      }}
+    >
+      <TopTab.Screen 
+        name="AdminDashboard" 
+        component={AdminToolsDashboard}
+        options={{ 
+          title: 'Admin Tools',
+          tabBarIcon: ({ color }) => <Ionicons name="shield-checkmark" size={20} color={color} />
         }}
-        sceneContainerStyle={{
-          pointerEvents: 'auto',
+      />
+      <TopTab.Screen 
+        name="Events" 
+        component={EventManagementScreen}
+        options={{ 
+          title: 'Events',
+          tabBarIcon: ({ color }) => <Ionicons name="calendar" size={20} color={color} />
         }}
-      >
-        <TopTab.Screen 
-          name="AdminDashboard" 
-          component={AdminToolsDashboard}
-          options={{ 
-            title: 'Admin Tools',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="shield-checkmark" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Events" 
-          component={EventManagementScreen}
-          options={{ 
-            title: 'Events',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="calendar" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Users" 
-          component={UserManagementDashboard}
-          options={{ 
-            title: 'Users',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="people" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Profile" 
-          component={ProfileScreen}
-          options={{ 
-            title: 'Profile',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="person" size={20} color={color} />
-            ),
-          }}
-        />
-      </TopTab.Navigator>
-    </TabContainer>
-  );
-};
+      />
+      <TopTab.Screen 
+        name="Users" 
+        component={UserManagementDashboard}
+        options={{ 
+          title: 'Users',
+          tabBarIcon: ({ color }) => <Ionicons name="people" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{ 
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />
+        }}
+      />
+    </TopTab.Navigator>
+  </TabContainer>
+);
 
-// Event Manager Tabs Navigator - Event Manager Dashboard, Events, Planner, Profile
-const EventManagerTabs = () => {
-  return (
-    <TabContainer>
-      <TopTab.Navigator
-        screenOptions={{
-          tabBarStyle: [styles.tabBar, styles.fixedTabBar],
-          tabBarActiveTintColor: '#6366f1',
-          tabBarInactiveTintColor: '#6b7280',
-          tabBarLabelStyle: styles.tabLabel,
-          tabBarIndicatorStyle: styles.tabIndicator,
-          tabBarShowIcon: true,
-          tabBarIconStyle: styles.tabIcon,
+const EventManagerTabs = () => (
+  <TabContainer>
+    <TopTab.Navigator
+      screenOptions={{
+        tabBarStyle: [styles.tabBar, styles.fixedTabBar],
+        tabBarActiveTintColor: '#6366f1',
+        tabBarInactiveTintColor: '#6b7280',
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIndicatorStyle: styles.tabIndicator,
+        tabBarShowIcon: true,
+        tabBarIconStyle: styles.tabIcon,
+      }}
+    >
+      <TopTab.Screen 
+        name="ManagerDashboard" 
+        component={AdminDashboardScreen}
+        options={{ 
+          title: 'Analytics',
+          tabBarIcon: ({ color }) => <Ionicons name="analytics" size={20} color={color} />
         }}
-        sceneContainerStyle={{
-          pointerEvents: 'auto',
+      />
+      <TopTab.Screen 
+        name="Events" 
+        component={EventManagementScreen}
+        options={{ 
+          title: 'Events',
+          tabBarIcon: ({ color }) => <Ionicons name="calendar" size={20} color={color} />
         }}
-      >
-        <TopTab.Screen 
-          name="ManagerDashboard" 
-          component={AdminDashboardScreen}
-          options={{ 
-            title: 'Analytics',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="analytics" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Events" 
-          component={EventManagementScreen}
-          options={{ 
-            title: 'Events',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="calendar" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Planner" 
-          component={EventPlannerScreen}
-          options={{ 
-            title: 'Planner',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="search" size={20} color={color} />
-            ),
-          }}
-        />
-        <TopTab.Screen 
-          name="Profile" 
-          component={ProfileScreen}
-          options={{ 
-            title: 'Profile',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="person" size={20} color={color} />
-            ),
-          }}
-        />
-      </TopTab.Navigator>
-    </TabContainer>
-  );
-};
+      />
+      <TopTab.Screen 
+        name="Planner" 
+        component={EventPlannerScreen}
+        options={{ 
+          title: 'Planner',
+          tabBarIcon: ({ color }) => <Ionicons name="search" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{ 
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />
+        }}
+      />
+    </TopTab.Navigator>
+  </TabContainer>
+);
 
-// Root Navigator Component
 const RootNavigator = () => {
   const { user, isLoading, hasAdminPrivileges } = useAuth();
 
-  console.log('Auth State in RootNavigator:', { 
-    user: user ? { email: user.email, role: user.role } : null, 
-    isLoading 
-  });
-
-  // Show loading until auth check is complete
   if (isLoading) {
     return <LoadingFallback />;
   }
 
   const getUserTabs = () => {
     if (!user) return CustomerTabs;
-    
-    // Event Managers get their own specialized tabs with Event Analytics Dashboard
-    if (user.role === 'event_manager') {
+
+    const roleLower = user.role?.toLowerCase() || '';
+
+    if (roleLower === 'event_manager') {
       return EventManagerTabs;
     }
-    
-    // Regular admins get full admin tabs with Admin Tools Dashboard
+
     if (hasAdminPrivileges()) {
       return AdminTabs;
     }
-    
-    // Regular customers
+
     return CustomerTabs;
   };
 
@@ -306,23 +254,17 @@ const RootNavigator = () => {
   return (
     <Stack.Navigator 
       initialRouteName={user ? "MainTabs" : "Login"}
-      screenOptions={{
-        headerShown: false,
-        cardStyle: { backgroundColor: '#f8f9fa' },
-      }}
+      screenOptions={{ headerShown: false }}
     >
       {!user ? (
-        // Auth Stack
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Registration" component={RegistrationScreen} />
         </>
       ) : (
-        // Main App Stack - Show appropriate tabs based on user role
         <Stack.Screen name="MainTabs" component={TabsComponent} />
       )}
       
-      {/* Common screens accessible from anywhere */}
       <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
       <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
@@ -367,7 +309,6 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     backgroundColor: '#ffffff',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     height: 70,
