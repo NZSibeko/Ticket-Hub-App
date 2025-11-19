@@ -152,8 +152,8 @@ export const AuthProvider = ({ children }) => {
         if (adminResponse.data.success) {
           console.log('Admin login successful');
           const userData = {
-            ...adminResponse.data.admin,
-            role: adminResponse.data.admin.role || 'admin',
+            ...adminResponse.data.user,
+            role: adminResponse.data.user.role || 'admin',
             userType: 'admin',
             displayRole: 'Administrator'
           };

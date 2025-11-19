@@ -1,0 +1,46 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./events.db"
+}
+
+model Event {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  description     String?
+  startDate       DateTime?
+  endDate         DateTime?
+  venue           String?
+  venueAddress    String?
+  city            String?
+  category        String    @default("other")
+  subcategory     String?
+  organizer       String?
+  organizerEmail  String?
+  organizerPhone  String?
+  website         String?
+  imageUrl        String?
+  source          String
+  sourceUrl       String
+  hasTicketing    Boolean   @default(false)
+  ticketingProvider String?
+  estimatedAttendees Int?
+  isAnnual        Boolean   @default(false)
+  editionYear     Int?
+  status          String    @default("upcoming") // upcoming, past, ongoing, cancelled
+  partnershipStatus String  @default("untapped") // untapped, contacted, in-negotiations, won, lost
+  switchScore     Int?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // For recurring events
+  parentEventId   String?
+  parentEvent     Event?    @relation("RecurringEvents", fields: [parentEventId], references: [id])
+  editions        Event[]   @relation("RecurringEvents")
+}

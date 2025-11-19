@@ -2,17 +2,20 @@
   "name": "ticket-hub-app",
   "main": "index.js",
   "version": "1.0.0",
+  "type": "commonjs",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "webpack serve --mode development --config webpack.config.js --port 3001",
     "web:build": "webpack --mode production --config webpack.config.js",
-    "dev": "concurrently \"npm run start\" \"npm run web\"",
+    "dev": "concurrently \"npm run server\" \"npm run web\"",
     "dev:mobile": "npm start",
     "dev:web": "npm run web",
+    "server": "node backend/server.js",
+    "scrape": "node backend/server.js --scrape",
     "install:all": "npm install",
-    "clean": "rm -rf node_modules && rm -rf .expo && npm install"
+    "clean": "rimraf node_modules .expo && npm install"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -63,7 +66,9 @@
     "react-native-web": "^0.21.0",
     "react-native-worklets": "0.5.1",
     "recharts": "^3.3.0",
-    "sequelize": "^6.37.7"
+    "sequelize": "^6.37.7",
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.28.4",
@@ -85,7 +90,6 @@
     "file-loader": "^6.2.0",
     "metro-react-native-babel-preset": "^0.77.0",
     "react-refresh": "^0.14.0",
-    "rimraf": "^5.0.5",
     "style-loader": "^3.3.3",
     "terser-webpack-plugin": "^5.3.9",
     "typescript": "~5.9.2",

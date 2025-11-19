@@ -1,4 +1,4 @@
-// services/backgroundScraper.js - FIXED WITH PROPER IMPORT
+// services/backgroundScraper.js - UPDATED WITH PAST EVENTS HANDLING AND TIME PERIOD SUPPORT
 const path = require('path');
 
 class BackgroundScraper {
@@ -40,6 +40,7 @@ class BackgroundScraper {
       lastUpdated: null,
       summary: {}
     };
+    this.pastCache = []; // NEW: Cache for past events
     
     // Aggressive settings for commercial use
     this.config = {
@@ -56,7 +57,7 @@ class BackgroundScraper {
   createMockScraper() {
     console.log('🔄 Using mock scraper as fallback');
     return {
-      scrapeCurrentAndFutureEvents: async () => {
+      scrapeEvents: async () => { // UPDATED: Renamed to scrapeEvents
         console.log('🎭 Mock scraper: Generating sample events...');
         // Return mock data
         return {
@@ -140,6 +141,11 @@ class BackgroundScraper {
   async runScraping() {
     if (this.isRunning) {
       console.log('🔄 Running scheduled scrape...');
+      // NEW: Move past events from current cache to pastCache before new scrape
+      const now = new Date();
+      const movedPast = this.cache.events.filter(e => new Date(e.eventDate) < now);
+      this.pastCache = Array.from(new Map([...this.pastCache, ...movedPast].map(e => [e.id, e])).values());
+      this.cache.events = this.cache.events.filter(e => new Date(e.eventDate) >= now);
       return await this.scrapeEvents();
     }
   }
@@ -147,12 +153,22 @@ class BackgroundScraper {
   async scrapeEvents() {
     try {
       console.log('🚀 Starting scheduled event scraping...');
-      console.log('📡 Calling scraper.scrapeCurrentAndFutureEvents()...');
+      console.log('📡 Calling scraper.scrapeEvents()...'); // UPDATED: Renamed
       
-      const result = await this.scraper.scrapeCurrentAndFutureEvents();
+      const result = await this.scraper.scrapeEvents(); // UPDATED: Renamed
       
       if (result && result.events) {
-        this.cache.events = result.events;
+        // NEW: Add new events to cache, filter upcoming
+        const now = new Date();
+        const newUpcoming = result.events.filter(e => new Date(e.eventDate) >= now);
+        const newPast = result.events.filter(e => new Date(e.eventDate) < now);
+        
+        // Merge unique upcoming
+        this.cache.events = Array.from(new Map([...this.cache.events, ...newUpcoming].map(e => [e.id, e])).values());
+        
+        // Add any new past (though unlikely)
+        this.pastCache = Array.from(new Map([...this.pastCache, ...newPast].map(e => [e.id, e])).values());
+        
         this.cache.summary = result.summary;
         this.cache.lastUpdated = new Date();
         this.lastRun = new Date();
@@ -189,22 +205,43 @@ class BackgroundScraper {
     return await this.scrapeEvents();
   }
 
-  getCachedEvents() {
+  getCachedEvents(timePeriod = 'upcoming') { // UPDATED: Added timePeriod param
     const now = Date.now();
     const cacheAge = this.cache.lastUpdated ? now - this.cache.lastUpdated.getTime() : Infinity;
     
-    if (cacheAge < this.config.cacheTimeout && this.cache.events.length > 0) {
-      console.log(`📊 Returning ${this.cache.events.length} cached events (${Math.round(cacheAge / 1000)}s old)`);
-      return {
-        events: this.cache.events,
-        summary: this.cache.summary,
-        source: 'cache',
-        cached: true,
-        lastUpdated: this.cache.lastUpdated
-      };
+    if (cacheAge < this.config.cacheTimeout) {
+      if (timePeriod === 'upcoming' && this.cache.events.length > 0) {
+        console.log(`📊 Returning ${this.cache.events.length} cached upcoming events (${Math.round(cacheAge / 1000)}s old)`);
+        return {
+          events: this.cache.events,
+          summary: this.cache.summary,
+          source: 'cache',
+          cached: true,
+          lastUpdated: this.cache.lastUpdated
+        };
+      } else if (timePeriod === 'past' && this.pastCache.length > 0) {
+        console.log(`📊 Returning ${this.pastCache.length} cached past events`);
+        return {
+          events: this.pastCache,
+          summary: {}, // Summary for past can be computed if needed
+          source: 'cache',
+          cached: true,
+          lastUpdated: this.cache.lastUpdated
+        };
+      } else if (timePeriod === 'all') {
+        const allEvents = [...this.pastCache, ...this.cache.events];
+        console.log(`📊 Returning ${allEvents.length} cached events (all)`);
+        return {
+          events: allEvents,
+          summary: this.cache.summary,
+          source: 'cache',
+          cached: true,
+          lastUpdated: this.cache.lastUpdated
+        };
+      }
     }
     
-    console.log('🔄 Cache expired or empty, need fresh scrape');
+    console.log('🔄 Cache expired or empty for requested period, need fresh scrape');
     return null;
   }
 
@@ -215,6 +252,7 @@ class BackgroundScraper {
       lastRun: this.lastRun,
       nextRun: this.nextRun,
       cacheSize: this.cache.events.length,
+      pastCacheSize: this.pastCache.length, // NEW
       cacheAge: this.cache.lastUpdated ? Date.now() - this.cache.lastUpdated.getTime() : null
     };
   }
@@ -229,6 +267,7 @@ class BackgroundScraper {
         nextRun: this.nextRun,
         cache: {
           eventCount: this.cache.events.length,
+          pastEventCount: this.pastCache.length, // NEW
           lastUpdated: this.cache.lastUpdated,
           summary: this.cache.summary
         },
@@ -251,10 +290,10 @@ class BackgroundScraper {
     }
   }
 
-  async getEvents(forceRefresh = false) {
+  async getEvents(timePeriod = 'upcoming', forceRefresh = false) { // UPDATED: Added timePeriod param
     // Return cached events if available and not forcing refresh
     if (!forceRefresh) {
-      const cached = this.getCachedEvents();
+      const cached = this.getCachedEvents(timePeriod);
       if (cached) {
         return cached;
       }
@@ -265,13 +304,7 @@ class BackgroundScraper {
     try {
       const result = await this.scrapeEvents();
       if (result.success) {
-        return {
-          events: result.events,
-          summary: result.summary,
-          source: 'fresh_scrape',
-          cached: false,
-          lastUpdated: this.lastRun
-        };
+        return this.getCachedEvents(timePeriod); // After scrape, return filtered
       }
     } catch (error) {
       console.log(`❌ Fresh scrape failed: ${error.message}`);
