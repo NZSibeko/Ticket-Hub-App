@@ -57,6 +57,28 @@ const requireEventManager = (req, res, next) => {
   next();
 };
 
+// In backend/server.js - REPLACE the old requireAdmin with this
+
+const requireAdminOrManager = (req, res, next) => {
+  const role = req.user?.role;
+  const userType = req.user?.userType;
+
+  const allowed = 
+    role === 'SUPER_ADMIN' || 
+    role === 'admin' || 
+    userType === 'admin' ||
+    role === 'event_manager' || 
+    userType === 'event_manager';
+
+  if (!allowed) {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Access denied. Admin or Event Manager role required.' 
+    });
+  }
+  next();
+};
+
 // AUTH ROUTES
 app.use('/api/auth', require('./routes/auth/customerAuth'));
 app.use('/api/event-manager/auth', require('./routes/auth/eventManagerAuth'));
@@ -64,6 +86,10 @@ app.use('/api/admin/auth', require('./routes/auth/adminAuth'));
 
 // PROTECTED ROUTES
 app.use('/api/event-manager/planner', authenticateToken, requireEventManager, require('./routes/eventPlanner'));
+
+// ADMIN DASHBOARD ROUTE 
+app.use('/api/admin/dashboard', authenticateToken, requireAdminOrManager, require('./routes/adminDashboard'));
+app.use('/api/events', authenticateToken, require('./routes/events'));
 
 // Scraper
 app.get('/api/scrape/run', authenticateToken, requireAdmin, async (req, res) => {
