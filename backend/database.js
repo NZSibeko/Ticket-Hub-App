@@ -79,13 +79,16 @@ const initializeTables = async () => {
     CREATE TABLE IF NOT EXISTS events (
       event_id INTEGER PRIMARY KEY AUTOINCREMENT,
       event_name TEXT NOT NULL,
-      description TEXT,
+      event_description TEXT,
       start_date TEXT,
+      end_date TEXT,
       location TEXT,
-      source_url TEXT,
+      event_image TEXT,
+      currency TEXT DEFAULT 'ZAR',
       has_ticketing INTEGER DEFAULT 0,
-      ticket_provider TEXT,
+      ticket_types TEXT, -- JSON string
       partnership_status TEXT DEFAULT 'untapped',
+      status TEXT DEFAULT 'DRAFT',
       notes TEXT,
       venue TEXT,
       contact_email TEXT,
@@ -106,13 +109,18 @@ const initializeTables = async () => {
 // Add missing columns if needed
 const updateEventsTable = async () => {
   const columns = [
-    'venue TEXT',
-    'contact_email TEXT',
-    'contact_phone TEXT',
-    'organizer_name TEXT',
+    'event_description TEXT',
+    'start_date TEXT',
+    'end_date TEXT',
+    'event_image TEXT',
+    'currency TEXT DEFAULT "ZAR"',
+    'ticket_types TEXT', 
+    'status TEXT DEFAULT "DRAFT"',
+    'created_by TEXT',
     'capacity INTEGER',
-    'archived INTEGER DEFAULT 0',
-    'category TEXT DEFAULT "General"'
+    'venue TEXT',
+    'category TEXT DEFAULT "General"',
+    'archived INTEGER DEFAULT 0'
   ];
 
   for (const col of columns) {

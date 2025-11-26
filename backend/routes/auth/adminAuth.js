@@ -4,7 +4,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { dbOperations } = require('../../database');
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = 'ticket-hub-super-secret-2025'; // MUST MATCH server.js
 
 router.post('/login', async (req, res) => {
   const { email, username, password } = req.body;
