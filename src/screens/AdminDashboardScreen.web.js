@@ -15,7 +15,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
+const API_URL = 'http://localhost:8081';
 
 // === CHART COMPONENTS (from original) ===
 const BarChart = ({ data, labels, color = '#6366f1', height = 200 }) => {

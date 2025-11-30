@@ -1,4 +1,4 @@
-// backend/database.js - FINAL 100% WORKING (November 19, 2025)
+// backend/database.js - FINAL 100% WORKING (November 30, 2025)
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -75,6 +75,7 @@ const initializeTables = async () => {
     )
   `);
 
+  // FIX: Added max_attendees and price. Renamed event_image to image_url.
   await dbOperations.run(`
     CREATE TABLE IF NOT EXISTS events (
       event_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,7 +84,7 @@ const initializeTables = async () => {
       start_date TEXT,
       end_date TEXT,
       location TEXT,
-      event_image TEXT,
+      image_url TEXT,  
       currency TEXT DEFAULT 'ZAR',
       has_ticketing INTEGER DEFAULT 0,
       ticket_types TEXT, -- JSON string
@@ -94,7 +95,9 @@ const initializeTables = async () => {
       contact_email TEXT,
       contact_phone TEXT,
       organizer_name TEXT,
-      capacity INTEGER,
+      max_attendees INTEGER, -- ADDED
+      price REAL, -- ADDED
+      capacity INTEGER, 
       archived INTEGER DEFAULT 0,
       category TEXT DEFAULT 'General',
       created_at TEXT DEFAULT (datetime('now')),
@@ -106,13 +109,13 @@ const initializeTables = async () => {
   console.log('All tables created/verified');
 };
 
-// Add missing columns if needed
+// Add missing columns if needed (Migration logic)
 const updateEventsTable = async () => {
   const columns = [
     'event_description TEXT',
     'start_date TEXT',
     'end_date TEXT',
-    'event_image TEXT',
+    'image_url TEXT', // RENAMED: event_image -> image_url
     'currency TEXT DEFAULT "ZAR"',
     'ticket_types TEXT', 
     'status TEXT DEFAULT "DRAFT"',
@@ -120,7 +123,9 @@ const updateEventsTable = async () => {
     'capacity INTEGER',
     'venue TEXT',
     'category TEXT DEFAULT "General"',
-    'archived INTEGER DEFAULT 0'
+    'archived INTEGER DEFAULT 0',
+    'max_attendees INTEGER', // ADDED missing column
+    'price REAL' // ADDED missing column
   ];
 
   for (const col of columns) {

@@ -21,7 +21,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
+const API_URL = 'http://localhost:8081';
 
 export default function EventPlannerScreen() {
   const { getAuthHeader } = useAuth();

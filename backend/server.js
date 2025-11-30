@@ -22,7 +22,7 @@ const app = express();
 
 // CORS
 app.use(cors({
-  origin: ['http://localhost:8081', 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:19006', 'http://localhost:19000'],
+  origin: ['http://localhost:8081', 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:19006', 'http://localhost:19000', 'http://localhost:8082'],
   credentials: true
 }));
 
@@ -101,7 +101,7 @@ app.get('/api/scrape/run', authenticateToken, requireAdmin, (req, res) => {
   res.json({ success: true, message: 'Scraper not active' });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8081;
 
 // STARTUP WITH FULL SCRAPER LOGS!
 (async () => {
