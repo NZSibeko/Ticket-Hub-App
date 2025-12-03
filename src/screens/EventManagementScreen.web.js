@@ -58,6 +58,10 @@ const EventManagementScreen = ({ navigation }) => {
   const [formData, setFormData] = useState(initialFormState);
   const [ticketTypes, setTicketTypes] = useState([]);
 
+  // *** NEW DELETE MODAL STATE ***
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState(null);
+
   // --- API Handlers ---
 
   const getAuthHeader = async () => {
@@ -144,50 +148,60 @@ const EventManagementScreen = ({ navigation }) => {
     }
   };
 
+  // --- NEW DELETE HANDLERS ---
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setEventToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!eventToDelete) return;
+
+    try {
+      const headers = await getAuthHeader();
+      const fetchHeaders = { ...headers };
+      delete fetchHeaders.hasToken;
+
+      const res = await fetch(`${API_BASE_URL}/api/events/${eventToDelete.event_id}`, {
+        method: 'DELETE',
+        headers: fetchHeaders,
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // 1. Remove event from the local state immediately
+        setEvents(prev => prev.filter(e => e.event_id !== eventToDelete.event_id));
+
+        // 2. Close delete modal
+        setShowDeleteModal(false);
+        setEventToDelete(null);
+
+        // 3. Show success modal
+        setModalMessage(data.message || 'Event permanently deleted!');
+        setSuccessModalVisible(true);
+        setTimeout(() => setSuccessModalVisible(false), 2000);
+
+      } else {
+        Alert.alert('Error', data.error || 'Failed to delete event.');
+        setShowDeleteModal(false);
+        setEventToDelete(null);
+      }
+    } catch (error) {
+      Alert.alert('Network Error', 'Could not connect to the server for deletion.');
+      setShowDeleteModal(false);
+      setEventToDelete(null);
+    }
+  };
+
   /**
-   * Implements Delete Confirmation Modal (using Alert) and Success Modal
+   * Implements Delete Confirmation Modal (using custom Modal)
    */
   const handleDeleteEvent = (event) => {
-    // 1. Delete Confirmation Modal (Alert)
-    Alert.alert(
-      "Confirm Delete",
-      `Are you sure you want to permanently delete the event "${event.event_name}"? This action cannot be undone.`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const headers = await getAuthHeader();
-              const fetchHeaders = { ...headers };
-              delete fetchHeaders.hasToken;
-
-              const res = await fetch(`${API_BASE_URL}/api/events/${event.event_id}`, {
-                method: 'DELETE',
-                headers: fetchHeaders,
-              });
-              const data = await res.json();
-              if (res.ok && data.success) {
-                // 2. Success Modal for Delete
-                setModalMessage(data.message || 'Event permanently deleted!');
-                setSuccessModalVisible(true);
-                loadEvents(false);
-                setTimeout(() => setSuccessModalVisible(false), 2000);
-              } else {
-                Alert.alert('Error', data.error || 'Failed to delete event.');
-              }
-            } catch (error) {
-              Alert.alert('Network Error', 'Could not connect to the server for deletion.');
-            }
-          }
-        }
-      ]
-    );
+    setEventToDelete(event);
+    setShowDeleteModal(true);
   };
+  // --- END NEW DELETE HANDLERS ---
+
 
   // --- Form Handlers (CREATE/EDIT) ---
 
@@ -423,7 +437,7 @@ const EventManagementScreen = ({ navigation }) => {
                 </TouchableOpacity>
                 <TouchableOpacity // Delete button for PENDING events
                   style={[styles.btnAction, styles.btnDanger]} 
-                  onPress={() => handleDeleteEvent(item)}
+                  onPress={() => handleDeleteEvent(item)} // *** UPDATED TO USE NEW MODAL LOGIC ***
                 >
                   <Text style={styles.btnDangerText}>Delete</Text>
                 </TouchableOpacity>
@@ -439,7 +453,7 @@ const EventManagementScreen = ({ navigation }) => {
                 </TouchableOpacity>
                 <TouchableOpacity // Delete button for VALIDATED events
                   style={[styles.btnAction, styles.btnDanger]} 
-                  onPress={() => handleDeleteEvent(item)}
+                  onPress={() => handleDeleteEvent(item)} // *** UPDATED TO USE NEW MODAL LOGIC ***
                 >
                   <Text style={styles.btnDangerText}>Delete</Text>
                 </TouchableOpacity>
@@ -456,7 +470,7 @@ const EventManagementScreen = ({ navigation }) => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.btnAction, styles.btnDanger]} 
-                onPress={() => handleDeleteEvent(item)} // Delete from archived
+                onPress={() => handleDeleteEvent(item)} // *** UPDATED TO USE NEW MODAL LOGIC ***
               >
                 <Text style={styles.btnDangerText}>Delete</Text>
               </TouchableOpacity>
@@ -483,6 +497,52 @@ const EventManagementScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  // --- NEW DELETE CONFIRMATION MODAL COMPONENT ---
+  const DeleteConfirmationModal = () => {
+    if (!eventToDelete) return null;
+
+    return (
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelDelete}
+      >
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalContainer}>
+            <View style={styles.deleteModalHeader}>
+              <Ionicons name="trash-outline" size={24} color="#ef4444" style={styles.deleteIcon} />
+              <Text style={styles.deleteModalTitle}>Confirm Deletion</Text>
+            </View>
+            <View style={styles.deleteModalContent}>
+              <Text style={styles.deleteModalMessage}>
+                Are you sure you want to permanently delete
+              </Text>
+              <Text style={styles.deleteModalEventName}>"{eventToDelete.event_name}"</Text>
+              <Text style={styles.deleteModalWarning}>
+                This action cannot be undone.
+              </Text>
+            </View>
+            <View style={styles.deleteModalActions}>
+              <TouchableOpacity
+                style={styles.deleteCancelButton}
+                onPress={cancelDelete}
+              >
+                <Text style={styles.deleteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmButton}
+                onPress={confirmDelete}
+              >
+                <Text style={styles.deleteConfirmText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+  // --- END NEW DELETE CONFIRMATION MODAL COMPONENT ---
 
   // --- Main Render ---
 
@@ -688,6 +748,9 @@ const EventManagementScreen = ({ navigation }) => {
             </View>
         </View>
       </Modal>
+      
+      {/* --- DELETE CONFIRMATION MODAL (NEW) --- */}
+      <DeleteConfirmationModal />
 
       {/* --- SUCCESS MODAL (Unchanged) --- */}
       <Modal visible={successModalVisible} transparent animationType="fade">
@@ -1048,6 +1111,101 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 8,
     textAlign: 'center',
+  },
+
+  // --- NEW DELETE MODAL STYLES (MATCHING EventPlannerScreen style intent) ---
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  deleteModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 400,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  deleteModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#fef2f2',
+  },
+  deleteIcon: {
+    marginRight: 10,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ef4444',
+  },
+  deleteModalContent: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  deleteModalMessage: {
+    fontSize: 16,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  deleteModalEventName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  deleteModalWarning: {
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  deleteCancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#e2e8f0',
+    backgroundColor: '#fff',
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  deleteCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  deleteConfirmButton: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  deleteConfirmText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
 
