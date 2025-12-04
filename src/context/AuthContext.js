@@ -1,5 +1,6 @@
 // src/context/AuthContext.js - FINAL COMPLETE & FIXED VERSION
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StackActions } from '@react-navigation/native'; // 💡 FIX 1: Import StackActions
 import axios from 'axios';
 import { createContext, useContext, useEffect, useState } from 'react';
 
@@ -71,7 +72,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
+  // 💡 FIX 2: login now accepts navigation object
+  const login = async (username, password, navigation) => {
     try {
       console.log('Attempting login for:', username);
 
@@ -101,6 +103,11 @@ export const AuthProvider = ({ children }) => {
           setUser(userData);
           setToken(authToken);
           setAuthToken(authToken);
+
+          // 🔑 FIX 3: Replaced 'MainApp' with the correct screen name 'Main'
+          if (navigation) {
+            navigation.dispatch(StackActions.replace('Main')); 
+          }
 
           return { success: true, user: userData, token: authToken };
         }
@@ -135,6 +142,11 @@ export const AuthProvider = ({ children }) => {
           setToken(authToken);
           setAuthToken(authToken);
 
+          // 🔑 FIX 3: Replaced 'MainApp' with the correct screen name 'Main'
+          if (navigation) {
+            navigation.dispatch(StackActions.replace('Main')); 
+          }
+
           return { success: true, user: userData, token: authToken };
         }
       } catch (customerError) {
@@ -167,6 +179,11 @@ export const AuthProvider = ({ children }) => {
           setUser(userData);
           setToken(authToken);
           setAuthToken(authToken);
+
+          // 🔑 FIX 3: Replaced 'MainApp' with the correct screen name 'Main'
+          if (navigation) {
+            navigation.dispatch(StackActions.replace('Main')); 
+          }
 
           return { success: true, user: userData, token: authToken };
         }

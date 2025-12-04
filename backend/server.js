@@ -1,4 +1,4 @@
-// backend/server.js - FINAL 100% WORKING (Updated December 3, 2025)
+// backend/server.js - WITH USER STATUS MIDDLEWARE & DELETE SUPPORT
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -20,7 +20,7 @@ const {
 
 const app = express();
 
-// CORS - Allow all your frontend origins
+// CORS - Allow all your frontend origins with DELETE method
 app.use(cors({
   origin: [
     'http://localhost:8081',
@@ -29,10 +29,12 @@ app.use(cors({
     'http://localhost:19006',
     'http://localhost:19000',
     'http://localhost:8082',
-    'http://localhost:5173',  // Vite
-    'http://127.0.0.1:5500'   // Live Server
+    'http://localhost:5173',
+    'http://127.0.0.1:5500'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -48,7 +50,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Hardcoded JWT secret (safe for dev)
+// Hardcoded JWT secret
 const JWT_SECRET = 'ticket-hub-super-secret-2025';
 
 // Make bcrypt & uuidv4 available globally in routes
@@ -73,6 +75,62 @@ const authenticateToken = (req, res, next) => {
     req.user = user;
     next();
   });
+};
+
+// Attach authenticateToken to app.locals
+app.locals.authenticateToken = authenticateToken;
+
+// ============================
+// USER STATUS CHECK MIDDLEWARE
+// ============================
+const checkUserStatus = async (req, res, next) => {
+    if (!req.user) {
+        return next();
+    }
+
+    try {
+        const user = req.user;
+        let userTable, userIdColumn;
+        
+        // Determine which table to check based on role
+        if (user.role === 'customer' || user.userType === 'customer') {
+            userTable = 'customers';
+            userIdColumn = 'customer_id';
+        } else if (user.role === 'event_manager' || user.userType === 'event_manager') {
+            userTable = 'event_managers';
+            userIdColumn = 'manager_id';
+        } else if (user.role === 'admin' || user.userType === 'admin' || user.role === 'SUPER_ADMIN') {
+            userTable = 'admins';
+            userIdColumn = 'admin_id';
+        } else {
+            return next();
+        }
+
+        // Get current user status from database
+        const dbUser = await dbOperations.get(
+            `SELECT status FROM ${userTable} WHERE ${userIdColumn} = ?`,
+            [user[userIdColumn] || user.userId]
+        );
+
+        if (dbUser && dbUser.status === 'suspended') {
+            return res.status(403).json({ 
+                success: false, 
+                error: 'Your account has been suspended. Please contact administrator.' 
+            });
+        }
+
+        if (dbUser && dbUser.status === 'inactive') {
+            return res.status(403).json({ 
+                success: false, 
+                error: 'Your account is inactive. Please contact administrator.' 
+            });
+        }
+
+        next();
+    } catch (err) {
+        console.error('User status check error:', err);
+        next(); // Continue on error
+    }
 };
 
 // Role-based middlewares
@@ -109,17 +167,16 @@ app.use('/api/auth', require('./routes/auth/customerAuth'));
 app.use('/api/event-manager/auth', require('./routes/auth/eventManagerAuth'));
 app.use('/api/admin/auth', require('./routes/auth/adminAuth'));
 
-// Protected Routes
-app.use('/api/event-manager/planner', authenticateToken, requireEventManager, require('./routes/eventPlanner'));
-app.use('/api/admin/dashboard', authenticateToken, requireAdminOrManager, require('./routes/adminDashboard'));
+// Protected Routes with Status Check
+app.use('/api/event-manager/planner', authenticateToken, checkUserStatus, requireEventManager, require('./routes/eventPlanner'));
+app.use('/api/admin/dashboard', authenticateToken, checkUserStatus, requireAdminOrManager, require('./routes/adminDashboard'));
 app.use('/api/events', require('./routes/events'));
-app.use('/api/admin/users', authenticateToken, requireAdminOrManager, require('./routes/adminUsers'));
 
-// USER MANAGEMENT ROUTES - CRITICAL FOR DASHBOARD
-app.use('/api/admin/users', authenticateToken, requireAdminOrManager, require('./routes/adminUsers'));
+// Admin Users Routes with Status Check
+app.use('/api/admin/users', authenticateToken, checkUserStatus, requireAdminOrManager, require('./routes/adminUsers'));
 
 // Optional scraper endpoint
-app.get('/api/scrape/run', authenticateToken, requireAdmin, (req, res) => {
+app.get('/api/scrape/run', authenticateToken, checkUserStatus, requireAdmin, (req, res) => {
   res.json({ success: true, message: 'Scraper not active in this build' });
 });
 

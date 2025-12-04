@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,6 +15,9 @@ import {
   View
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+
+// Import the new local image (assuming this path is correct relative to the component)
+const Logo = require('../assets/images/tickethub-logo.png');
 
 const { width, height } = Dimensions.get('window');
 
@@ -91,11 +95,13 @@ const LoginScreen = ({ navigation }) => {
           <View style={styles.content}>
             {/* Logo Section */}
             <View style={styles.logoContainer}>
-              <View style={styles.logoPlaceholder}>
-                <Ionicons name="ticket" size={scaleSize(50)} color="#000" />
+              <View style={styles.logoWrapper}> 
+                <Image 
+                  source={Logo} 
+                  style={styles.logoImage} 
+                  resizeMode="contain" 
+                />
               </View>
-              <Text style={styles.appTitle}>Welcome to Ticket-Hub</Text>
-              <Text style={styles.appSubtitle}>Sign in to your account to continue</Text>
             </View>
 
             {/* Login Form Card */}
@@ -223,50 +229,30 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
+    minHeight: '100%',
   },
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 40,
+    paddingVertical: 20,
+    minHeight: '100%',
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 15, // Decreased margin
   },
-  logoPlaceholder: {
-    width: scaleSize(100),
-    height: scaleSize(100),
-    borderRadius: scaleSize(50),
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
+  logoWrapper: {
+    marginBottom: 5, // Decreased margin
   },
-  appTitle: {
-    fontSize: scaleFont(24),
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  appSubtitle: {
-    fontSize: scaleFont(16),
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 22,
+  logoImage: {
+    width: scaleSize(120), // Updated to 100x100
+    height: scaleSize(120), // Updated to 100x100
   },
   formContainer: {
     backgroundColor: '#fff',
-    padding: 24,
+    padding: 18, // Decreased padding
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -275,24 +261,24 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: '#f1f5f9',
-    marginBottom: 20,
+    marginBottom: 10, // Decreased margin
   },
   welcomeText: {
-    fontSize: scaleFont(22),
+    fontSize: scaleFont(20),
     fontWeight: '700',
     color: '#000',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   instructionText: {
     fontSize: scaleFont(14),
     color: '#64748b',
-    marginBottom: 24,
+    marginBottom: 16, // Decreased margin
     textAlign: 'center',
     lineHeight: 20,
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -302,7 +288,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   inputIcon: {
     marginRight: 12,
@@ -315,7 +301,7 @@ const styles = StyleSheet.create({
   },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
-    marginBottom: 24,
+    marginBottom: 12, // Decreased margin
   },
   forgotPasswordText: {
     fontSize: scaleFont(14),
@@ -324,7 +310,7 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     backgroundColor: '#000',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -333,7 +319,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
-    marginBottom: 20,
+    marginBottom: 10, // Decreased margin
   },
   loginButtonDisabled: {
     backgroundColor: '#6b7280',
@@ -357,7 +343,7 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 12, // Decreased margin
   },
   dividerLine: {
     flex: 1,
@@ -374,7 +360,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   registerText: {
     color: '#64748b',
@@ -387,7 +373,7 @@ const styles = StyleSheet.create({
   },
   termsContainer: {
     backgroundColor: '#fff',
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },

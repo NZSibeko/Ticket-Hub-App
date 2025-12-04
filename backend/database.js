@@ -1,4 +1,4 @@
-// backend/database.js - FINAL 100% WORKING (December 3, 2025) + phone for admins
+// backend/database.js - FINAL WITH STATUS COLUMNS & LAST_LOGIN
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -36,7 +36,7 @@ const dbOperations = {
 const connectDatabase = () => Promise.resolve();
 
 // ========================
-// CREATE ALL TABLES — WITH phone FOR ADMINS
+// CREATE ALL TABLES — WITH STATUS COLUMNS
 // ========================
 const initializeTables = async () => {
   await dbOperations.run(`
@@ -46,20 +46,24 @@ const initializeTables = async () => {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       phone TEXT,
+      status TEXT DEFAULT 'active',
       role TEXT DEFAULT 'event_manager',
+      last_login TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
 
-  // ADMINS TABLE — NOW WITH phone COLUMN
+  // ADMINS TABLE — WITH STATUS COLUMN
   await dbOperations.run(`
     CREATE TABLE IF NOT EXISTS admins (
       admin_id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      phone TEXT,                    -- ADDED: phone for admins
+      phone TEXT,
+      status TEXT DEFAULT 'active',
       role TEXT DEFAULT 'admin',
+      last_login TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
@@ -72,7 +76,9 @@ const initializeTables = async () => {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       phone TEXT,
+      status TEXT DEFAULT 'active',
       role TEXT DEFAULT 'customer',
+      last_login TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
@@ -150,7 +156,7 @@ const initializeTables = async () => {
     }
   }
 
-  console.log('All tables created/verified — admins now support phone number');
+  console.log('All tables created/verified — all user tables now have status and last_login columns');
 };
 
 // Migration: Add phone column if missing
@@ -196,22 +202,61 @@ const addPhoneToAdmins = async () => {
   }
 };
 
+// Migration: Add status column to all user tables
+const addStatusToUserTables = async () => {
+  const tables = ['event_managers', 'admins', 'customers'];
+  
+  for (const table of tables) {
+    try {
+      await dbOperations.run(`ALTER TABLE ${table} ADD COLUMN status TEXT DEFAULT 'active'`);
+      console.log(`Added status column to ${table} table`);
+      
+      // Update existing users to have 'active' status
+      await dbOperations.run(`UPDATE ${table} SET status = 'active' WHERE status IS NULL`);
+    } catch (err) {
+      if (!err.message.includes('duplicate column name')) {
+        console.error(`Error adding status column to ${table}:`, err);
+      }
+    }
+  }
+};
+
+// Migration: Add last_login column to user tables
+const addLastLoginToUserTables = async () => {
+  const tables = ['event_managers', 'admins', 'customers'];
+  
+  for (const table of tables) {
+    try {
+      await dbOperations.run(`ALTER TABLE ${table} ADD COLUMN last_login TEXT`);
+      console.log(`Added last_login column to ${table} table`);
+      
+      // Set default last_login to created_at for existing users
+      await dbOperations.run(`UPDATE ${table} SET last_login = created_at WHERE last_login IS NULL`);
+    } catch (err) {
+      if (!err.message.includes('duplicate column name')) {
+        console.error(`Error adding last_login column to ${table}:`, err);
+      }
+    }
+  }
+};
+
 // ========================
-// DEFAULT USERS (unchanged from your original)
+// DEFAULT USERS
 // ========================
 const ensureDefaultEventManager = async (bcrypt, uuidv4) => {
   try {
     const existing = await dbOperations.get(`SELECT * FROM event_managers WHERE email = ?`, ['manager@tickethub.co.za']);
     if (!existing) {
       const hashed = await bcrypt.hash('manager123', 10);
+      const now = new Date().toISOString();
       await dbOperations.run(
-        `INSERT INTO event_managers (manager_id, name, email, password, phone, role) VALUES (?, ?, ?, ?, ?, 'event_manager')`,
-        [uuidv4(), 'Default Manager', 'manager@tickethub.co.za', hashed, '+27 82 000 0000']
+        `INSERT INTO event_managers (manager_id, name, email, password, phone, status, role, last_login, created_at) VALUES (?, ?, ?, ?, ?, ?, 'event_manager', ?, ?)`,
+        [uuidv4(), 'Default Manager', 'manager@tickethub.co.za', hashed, '+27 82 000 0000', 'active', now, now]
       );
       await dbOperations.run(
         `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ['Default Manager', 'manager@tickethub.co.za', hashed, 'Event Manager', 'active', '2025-11-20', '2025-12-02', 'DM', 'South Africa']
+        ['Default Manager', 'manager@tickethub.co.za', hashed, 'Event Manager', 'active', '2025-11-20', 'Just now', 'DM', 'South Africa']
       );
       console.log('Default event manager created');
     } else {
@@ -227,14 +272,15 @@ const ensureDefaultAdmin = async (bcrypt, uuidv4) => {
     const existing = await dbOperations.get(`SELECT * FROM admins WHERE email = ?`, ['admin@tickethub.co.za']);
     if (!existing) {
       const hashed = await bcrypt.hash('admin123', 10);
+      const now = new Date().toISOString();
       await dbOperations.run(
-        `INSERT INTO admins (admin_id, name, email, password, phone, role) VALUES (?, ?, ?, ?, ?, 'SUPER_ADMIN')`,
-        [uuidv4(), 'Super Admin', 'admin@tickethub.co.za', hashed, null]
+        `INSERT INTO admins (admin_id, name, email, password, phone, status, role, last_login, created_at) VALUES (?, ?, ?, ?, ?, ?, 'SUPER_ADMIN', ?, ?)`,
+        [uuidv4(), 'Super Admin', 'admin@tickethub.co.za', hashed, null, 'active', now, now]
       );
       await dbOperations.run(
         `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ['Super Admin', 'admin@tickethub.co.za', hashed, 'Admin', 'active', '2025-11-15', '2025-12-02', 'SA', 'South Africa']
+        ['Super Admin', 'admin@tickethub.co.za', hashed, 'Admin', 'active', '2025-11-15', 'Just now', 'SA', 'South Africa']
       );
       console.log('Default admin created');
     } else {
@@ -250,15 +296,16 @@ const ensureDefaultCustomer = async (bcrypt, uuidv4) => {
     const existing = await dbOperations.get(`SELECT * FROM customers WHERE email = ?`, ['customer@test.com']);
     if (!existing) {
       const hashed = await bcrypt.hash('customer123', 10);
+      const now = new Date().toISOString();
       await dbOperations.run(
-        `INSERT INTO customers (customer_id, first_name, last_name, email, password, phone, role)
-         VALUES (?, ?, ?, ?, ?, ?, 'customer')`,
-        [uuidv4(), 'Test', 'Customer', 'customer@test.com', hashed, '+27 71 123 4567']
+        `INSERT INTO customers (customer_id, first_name, last_name, email, password, phone, status, role, last_login, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', ?, ?)`,
+        [uuidv4(), 'Test', 'Customer', 'customer@test.com', hashed, '+27 71 123 4567', 'active', now, now]
       );
       await dbOperations.run(
         `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ['Test Customer', 'customer@test.com', hashed, 'Customer', 'active', '2025-11-25', '2025-12-02', 'TC', 'South Africa']
+        ['Test Customer', 'customer@test.com', hashed, 'Customer', 'active', '2025-11-25', 'Just now', 'TC', 'South Africa']
       );
       console.log('Default customer created: customer@test.com / customer123');
     } else {
@@ -275,7 +322,9 @@ const ensureDefaultCustomer = async (bcrypt, uuidv4) => {
 (async () => {
   try {
     await initializeTables();
-    await addPhoneToAdmins();     // Ensures phone column exists
+    await addStatusToUserTables();     // Add status columns
+    await addLastLoginToUserTables();  // Add last_login columns
+    await addPhoneToAdmins();
     await updateEventsTable();
   } catch (err) {
     console.error('Initialization error:', err);
@@ -293,5 +342,7 @@ module.exports = {
   ensureDefaultCustomer,
   initializeTables,
   updateEventsTable,
-  addPhoneToAdmins
+  addPhoneToAdmins,
+  addStatusToUserTables,
+  addLastLoginToUserTables
 };

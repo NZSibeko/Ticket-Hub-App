@@ -20,7 +20,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
+const API_URL = 'http://localhost:8081';
 
 // Responsive scaling functions
 const scaleSize = (size) => {

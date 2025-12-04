@@ -177,7 +177,6 @@ const SearchEventsScreen = ({ navigation, route }) => {
     return 'Event';
   };
 
-  // --- UPDATED EVENT CARD (MATCHING DISCOVER SCREEN) ---
   const EventCard = ({ event, index }) => {
     const soldPercentage = event.current_attendees && event.max_attendees ? (event.current_attendees / event.max_attendees) * 100 : 0;
     const minPrice = event.ticket_types ? Math.min(...event.ticket_types.map(t => t.price)) : 'TBD';
@@ -250,7 +249,6 @@ const SearchEventsScreen = ({ navigation, route }) => {
     );
   };
 
-  // Carousel Section with Navigation Arrows
   const CarouselSection = ({ title, icon, iconColor, iconBgColor, events }) => {
     const scrollViewRef = useRef(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -270,7 +268,7 @@ const SearchEventsScreen = ({ navigation, route }) => {
     const scrollLeft = () => {
       if (scrollViewRef.current) {
         const scrollDistance = windowWidth > 768 ? 420 : windowWidth * 0.8;
-        const newScrollX = 0; // Simplified for demo, ideally calculates precise offset
+        const newScrollX = 0; 
         scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
       }
     };
@@ -278,7 +276,7 @@ const SearchEventsScreen = ({ navigation, route }) => {
     const scrollRight = () => {
       if (scrollViewRef.current) {
         const scrollDistance = windowWidth > 768 ? 420 : windowWidth * 0.8;
-        scrollViewRef.current.scrollTo({ x: scrollDistance, animated: true }); // Simplified
+        scrollViewRef.current.scrollTo({ x: scrollDistance, animated: true });
       }
     };
 
@@ -378,7 +376,7 @@ const SearchEventsScreen = ({ navigation, route }) => {
         </View>
         <View style={styles.footerBottom}>
           <Text style={styles.footerBottomText}>
-            © 2024 Ticket-hub. All rights reserved.
+            © 2025 Ticket-hub. All rights reserved.
           </Text>
         </View>
       </View>
@@ -386,6 +384,7 @@ const SearchEventsScreen = ({ navigation, route }) => {
   };
 
   const categories = categorizeEvents();
+  const hasEvents = categories.all.length > 0;
 
   if (loading) {
     return (
@@ -419,64 +418,84 @@ const SearchEventsScreen = ({ navigation, route }) => {
 
       {/* Main Content */}
       <View style={styles.scrollableContent}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
+        <ScrollView 
+            style={styles.scrollView} 
+            contentContainerStyle={styles.scrollViewContent} // flexGrow: 1 is set here in styles
+        >
           <View style={styles.scrollContentStart} />
           
-          <CarouselSection 
-            title="This Week" 
-            icon="time" iconColor="#6366f1" iconBgColor="#6366f115" 
-            events={categories.thisWeek} 
-          />
-          <CarouselSection 
-            title="Trending Now" 
-            icon="trending-up" iconColor="#FF4400" iconBgColor="#FF440015" 
-            events={categories.trending} 
-          />
+          {!hasEvents ? (
+            <View style={styles.noEventsContainer}>
+                <View style={styles.noEventsIconBg}>
+                    <Ionicons name="calendar-clear-outline" size={48} color="#666" />
+                </View>
+                <Text style={styles.noEventsText}>No events found</Text>
+                <Text style={styles.noEventsSubText}>
+                    We couldn't find any events matching "{searchQuery}". {'\n'}Try adjusting your search or filters.
+                </Text>
+            </View>
+          ) : (
+            <>
+                <CarouselSection 
+                    title="This Week" 
+                    icon="time" iconColor="#6366f1" iconBgColor="#6366f115" 
+                    events={categories.thisWeek} 
+                />
+                <CarouselSection 
+                    title="Trending Now" 
+                    icon="trending-up" iconColor="#FF4400" iconBgColor="#FF440015" 
+                    events={categories.trending} 
+                />
+                
+                <CarouselSection 
+                    title="Nightlife & Parties" 
+                    icon="moon" iconColor="#9C27B0" iconBgColor="#9C27B015" 
+                    events={categories.nightlife} 
+                />
+                <CarouselSection 
+                    title="Budget Friendly (< R50)" 
+                    icon="wallet" iconColor="#4CAF50" iconBgColor="#4CAF5015" 
+                    events={categories.budget} 
+                />
+                <CarouselSection 
+                    title="Weekend Vibes" 
+                    icon="sunny" iconColor="#FF9800" iconBgColor="#FF980015" 
+                    events={categories.weekend} 
+                />
+                <CarouselSection 
+                    title="Workshops & Expos" 
+                    icon="bulb" iconColor="#2196F3" iconBgColor="#2196F315" 
+                    events={categories.workshops} 
+                />
+                
+                <CarouselSection 
+                    title="Music & Concerts" 
+                    icon="musical-notes" iconColor="#E91E63" iconBgColor="#E91E6315" 
+                    events={categories.music} 
+                />
+                <CarouselSection 
+                    title="Food & Drink" 
+                    icon="restaurant" iconColor="#FF9800" iconBgColor="#FF980015" 
+                    events={categories.food} 
+                />
+                <CarouselSection 
+                    title="Arts & Culture" 
+                    icon="color-palette" iconColor="#5B188C" iconBgColor="#5B188C15" 
+                    events={categories.arts} 
+                />
+                
+                <CarouselSection 
+                    title="All Events" 
+                    icon="apps" iconColor="#17A2B8" iconBgColor="#17A2B815" 
+                    events={categories.all} 
+                />
+            </>
+          )}
           
-          <CarouselSection 
-            title="Nightlife & Parties" 
-            icon="moon" iconColor="#9C27B0" iconBgColor="#9C27B015" 
-            events={categories.nightlife} 
-          />
-          <CarouselSection 
-            title="Budget Friendly (< R50)" 
-            icon="wallet" iconColor="#4CAF50" iconBgColor="#4CAF5015" 
-            events={categories.budget} 
-          />
-           <CarouselSection 
-            title="Weekend Vibes" 
-            icon="sunny" iconColor="#FF9800" iconBgColor="#FF980015" 
-            events={categories.weekend} 
-          />
-          <CarouselSection 
-            title="Workshops & Expos" 
-            icon="bulb" iconColor="#2196F3" iconBgColor="#2196F315" 
-            events={categories.workshops} 
-          />
-          
-          <CarouselSection 
-            title="Music & Concerts" 
-            icon="musical-notes" iconColor="#E91E63" iconBgColor="#E91E6315" 
-            events={categories.music} 
-          />
-          <CarouselSection 
-            title="Food & Drink" 
-            icon="restaurant" iconColor="#FF9800" iconBgColor="#FF980015" 
-            events={categories.food} 
-          />
-          <CarouselSection 
-            title="Arts & Culture" 
-            icon="color-palette" iconColor="#5B188C" iconBgColor="#5B188C15" 
-            events={categories.arts} 
-          />
-          
-          <CarouselSection 
-            title="All Events" 
-            icon="apps" iconColor="#17A2B8" iconBgColor="#17A2B815" 
-            events={categories.all} 
-          />
-          
-          <Footer />
+          {/* Footer Wrapper with Auto Margin Top for Sticky Behavior */}
+          <View style={styles.footerWrapper}>
+            <Footer />
+          </View>
         </ScrollView>
       </View>
       
@@ -527,7 +546,8 @@ const styles = StyleSheet.create({
   },
   scrollableContent: { flex: 1, marginTop: 68 },
   scrollView: { flex: 1 },
-  scrollViewContent: { paddingTop: 16 },
+  // UPDATED: Added flexGrow to ensure content stretches to fill screen
+  scrollViewContent: { paddingTop: 16, flexGrow: 1 },
   scrollContentStart: { marginBottom: 0 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
@@ -544,7 +564,7 @@ const styles = StyleSheet.create({
   },
   carouselButtonDisabled: { opacity: 0.4 },
 
-  // --- UPDATED CARD STYLES (FROM DISCOVER SCREEN) ---
+  // Card Styles
   eventCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -565,8 +585,6 @@ const styles = StyleSheet.create({
   eventImage: {
     width: '100%',
     height: '100%',
-    // Removed specific border radius here as the container overflow hidden handles it, 
-    // but kept consistent with DiscoverScreen source
   },
   hotTag: {
     position: 'absolute',
@@ -617,9 +635,43 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 18,
   },
-  // ----------------------------------------------------
+
+  // --- NEW: No Events Styles ---
+  noEventsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    minHeight: 400, // Gives it some vertical breathing room
+  },
+  noEventsIconBg: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  noEventsText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 10,
+  },
+  noEventsSubText: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 300,
+  },
 
   // Footer Styles
+  // UPDATED: Added marginTop: 'auto' to push footer to bottom
+  footerWrapper: {
+    marginTop: 'auto', 
+  },
   footer: { backgroundColor: '#1a1a1a', paddingTop: 40, paddingBottom: 20, borderTopWidth: 1, borderTopColor: '#333', marginTop: 40 },
   footerContent: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 40, maxWidth: 1200, marginHorizontal: 'auto', width: '100%' },
   footerContentMobile: { flexDirection: 'column', gap: 30, paddingHorizontal: 20 },
