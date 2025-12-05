@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const metricsAPI = require('./routes/metricsAPI');
 
 // Database setup
 const db = require('./database');
@@ -158,6 +159,22 @@ const requireAdminOrManager = (req, res, next) => {
   next();
 };
 
+// Add after other require statements
+const { initializeMetrics } = require('./middleware/metricsMiddleware');
+const MetricsService = require('./services/MetricsService');
+
+// Initialize metrics service
+const metricsService = new MetricsService();
+initializeMetrics(metricsService);
+metricsService.startMetricsCollection();
+
+// Add metrics middleware before routes
+app.use(require('./middleware/metricsMiddleware').metricsMiddleware);
+app.use(require('./middleware/metricsMiddleware').securityLoggingMiddleware);
+
+// Add metrics API route (after other routes)
+app.use('/api/metrics', require('./routes/metricsAPI'));
+
 // ============================
 // ROUTES
 // ============================
@@ -179,6 +196,9 @@ app.use('/api/admin/users', authenticateToken, checkUserStatus, requireAdminOrMa
 app.get('/api/scrape/run', authenticateToken, checkUserStatus, requireAdmin, (req, res) => {
   res.json({ success: true, message: 'Scraper not active in this build' });
 });
+
+// Add Metrics API routes (with authentication)
+app.use('/api/metrics', authenticateToken, checkUserStatus, requireAdminOrManager, require('./routes/metricsAPI'));
 
 // Health check
 app.get('/api/health', (req, res) => {

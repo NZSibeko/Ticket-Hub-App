@@ -1,4 +1,4 @@
-// src/context/AuthContext.js - FINAL COMPLETE & FIXED VERSION
+// src/context/AuthContext.js - FIXED VERSION WITH NAVIGATION FIX
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StackActions } from '@react-navigation/native'; // 💡 FIX 1: Import StackActions
 import axios from 'axios';
@@ -104,7 +104,7 @@ export const AuthProvider = ({ children }) => {
           setToken(authToken);
           setAuthToken(authToken);
 
-          // 🔑 FIX 3: Replaced 'MainApp' with the correct screen name 'Main'
+          // 🔑 FIX 3: Changed from 'MainApp' to 'Main'
           if (navigation) {
             navigation.dispatch(StackActions.replace('Main')); 
           }
@@ -142,7 +142,7 @@ export const AuthProvider = ({ children }) => {
           setToken(authToken);
           setAuthToken(authToken);
 
-          // 🔑 FIX 3: Replaced 'MainApp' with the correct screen name 'Main'
+          // 🔑 FIX 3: Changed from 'MainApp' to 'Main'
           if (navigation) {
             navigation.dispatch(StackActions.replace('Main')); 
           }
@@ -180,7 +180,7 @@ export const AuthProvider = ({ children }) => {
           setToken(authToken);
           setAuthToken(authToken);
 
-          // 🔑 FIX 3: Replaced 'MainApp' with the correct screen name 'Main'
+          // 🔑 FIX 3: Changed from 'MainApp' to 'Main'
           if (navigation) {
             navigation.dispatch(StackActions.replace('Main')); 
           }

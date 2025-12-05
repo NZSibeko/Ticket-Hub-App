@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = 'http://localhost:8081'; // Updated to your backend port
 
 // Add Tailwind CDN
 if (typeof document !== 'undefined' && !document.getElementById('tailwind-cdn')) {
@@ -82,91 +82,171 @@ const AdminToolsDashboard = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState(null);
   const [modalTitle, setModalTitle] = useState('');
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchAdminData();
-    const interval = setInterval(fetchAdminData, 30000);
+    const interval = setInterval(fetchAdminData, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, [timeRange]);
 
   const fetchAdminData = async () => {
     try {
-      const mockData = {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch real metrics data from API
+      const response = await fetch(`${API_URL}/api/metrics/dashboard-metrics`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch metrics');
+      }
+      
+      // Transform API data to match expected format
+      const metricsData = result.data;
+      
+      // Create alerts from system alerts
+      const alerts = metricsData.alerts.map((alert, index) => ({
+        id: alert.id || index + 1,
+        type: alert.type || 'system',
+        title: alert.title || 'System Alert',
+        message: alert.message || 'System notification',
+        severity: alert.severity || 'medium',
+        time: alert.time || 'Just now',
+        count: 1,
+        icon: getAlertIcon(alert.type || 'system'),
+        color: getAlertColor(alert.severity || 'medium'),
+        details: alert.message || 'System alert details',
+        affectedItems: alert.details || [],
+        recommendations: alert.recommendations || []
+      }));
+      
+      // Create security logs
+      const securityLogs = metricsData.security?.securityLogs?.map((log, index) => ({
+        id: log.id || index + 1,
+        type: log.type || 'Security Event',
+        user: log.user || 'Unknown',
+        ip: log.ip || 'N/A',
+        time: log.time || 'Just now',
+        severity: log.severity || 'info',
+        details: log.details || 'Security event'
+      })) || [];
+      
+      // Create blocked IPs list
+      const blockedIPsList = metricsData.security?.blockedIPsList?.map((ip, index) => ({
+        ip: ip.ip || `192.168.1.${index + 100}`,
+        reason: ip.reason || 'Suspicious activity',
+        blocked: ip.blocked || 'Recently',
+        attempts: ip.attempts || 1
+      })) || [];
+      
+      // Create recent activity
+      const recentActivity = metricsData.recentActivity?.map((activity, index) => ({
+        type: activity.type || 'activity',
+        user: activity.user || 'System',
+        time: activity.time || 'Just now',
+        status: getActivityStatus(activity.type),
+        details: activity.details || 'System activity'
+      })) || [];
+      
+      // Create system logs
+      const logs = metricsData.logs?.map((log, index) => ({
+        id: log.id || index + 1,
+        timestamp: log.timestamp || new Date().toISOString(),
+        level: log.level || 'INFO',
+        module: log.module || 'System',
+        message: log.message || 'System log entry',
+        user: log.user || 'system'
+      })) || [];
+      
+      // Create pending events
+      const pendingEvents = metricsData.platform?.pendingEvents?.map((event, index) => ({
+        id: event.id || index + 1,
+        name: event.name || 'Pending Event',
+        organizer: event.organizer || 'Unknown',
+        submitted: event.submitted || 'Recently',
+        category: event.category || 'General',
+        status: 'pending'
+      })) || [];
+      
+      // Create backup history
+      const backupHistory = metricsData.database?.backupHistory?.map((backup, index) => ({
+        date: backup.date || new Date().toISOString(),
+        size: backup.size || '0 MB',
+        duration: backup.duration || '0 sec',
+        status: backup.status || 'pending',
+        type: backup.type || 'automatic'
+      })) || [];
+      
+      const transformedData = {
         systemHealth: {
-          status: 'healthy',
-          uptime: '99.8%',
-          lastIncident: '12 days ago',
-          responseTime: '145ms'
+          status: metricsData.systemHealth?.status || 'healthy',
+          uptime: metricsData.systemHealth?.uptime || '0 days',
+          lastIncident: metricsData.systemHealth?.lastIncident || 'No incidents',
+          responseTime: metricsData.systemHealth?.responseTime || '0 ms'
         },
         users: {
-          total: 2847,
-          active: 1923,
-          inactive: 924,
-          newThisWeek: 156,
-          suspended: 12,
-          admins: 8,
-          eventManagers: 45,
-          customers: 2794,
-          growthRate: 12.3,
-          userList: [
-            { id: 1, name: 'John Smith', email: 'john@example.com', role: 'Customer', status: 'active', joined: '2024-01-15', lastActive: '2 hours ago' },
-            { id: 2, name: 'Sarah Wilson', email: 'sarah@example.com', role: 'Event Manager', status: 'active', joined: '2024-02-20', lastActive: '5 min ago' },
-            { id: 3, name: 'Mike Johnson', email: 'mike@example.com', role: 'Customer', status: 'inactive', joined: '2024-03-10', lastActive: '2 days ago' },
-            { id: 4, name: 'Emma Davis', email: 'emma@example.com', role: 'Admin', status: 'active', joined: '2023-12-01', lastActive: '1 hour ago' },
-            { id: 5, name: 'Alex Brown', email: 'alex@example.com', role: 'Customer', status: 'suspended', joined: '2024-04-05', lastActive: '1 week ago' },
-            { id: 6, name: 'Lisa Anderson', email: 'lisa@example.com', role: 'Event Manager', status: 'active', joined: '2024-01-28', lastActive: '10 min ago' },
-            { id: 7, name: 'Tom Wilson', email: 'tom@example.com', role: 'Customer', status: 'active', joined: '2024-05-12', lastActive: '30 min ago' },
-            { id: 8, name: 'Kate Miller', email: 'kate@example.com', role: 'Customer', status: 'active', joined: '2024-03-22', lastActive: '3 hours ago' }
-          ]
+          total: metricsData.users?.total || 0,
+          active: metricsData.users?.active || 0,
+          inactive: metricsData.users?.inactive || 0,
+          newThisWeek: metricsData.users?.newThisWeek || 0,
+          suspended: metricsData.users?.suspended || 0,
+          admins: metricsData.users?.admins || 0,
+          eventManagers: metricsData.users?.eventManagers || 0,
+          customers: metricsData.users?.customers || 0,
+          growthRate: metricsData.users?.growthRate || 0,
+          userList: metricsData.users?.userList?.map(user => ({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status || 'active',
+            joined: user.joined,
+            lastActive: user.lastActive,
+            phone: user.phone,
+            avatar: user.avatar,
+            country: user.country
+          })) || []
         },
         security: {
-          failedLogins: 23,
-          suspiciousActivity: 5,
-          blockedIPs: 18,
-          twoFactorEnabled: 67.8,
-          passwordResets: 89,
-          securityLogs: [
-            { id: 1, type: 'Failed Login', user: 'unknown@example.com', ip: '192.168.1.100', time: '5 min ago', severity: 'high' },
-            { id: 2, type: 'Suspicious Activity', user: 'test@example.com', ip: '10.0.0.50', time: '15 min ago', severity: 'medium' },
-            { id: 3, type: 'IP Blocked', user: 'spam@example.com', ip: '172.16.0.1', time: '1 hour ago', severity: 'high' },
-            { id: 4, type: 'Password Reset', user: 'john@example.com', ip: '192.168.1.50', time: '2 hours ago', severity: 'low' },
-            { id: 5, type: 'Failed Login', user: 'admin@example.com', ip: '203.0.113.0', time: '3 hours ago', severity: 'high' }
-          ],
-          blockedIPsList: [
-            { ip: '192.168.1.100', reason: 'Brute force attack', blocked: '2 hours ago', attempts: 45 },
-            { ip: '10.0.0.50', reason: 'Suspicious activity', blocked: '5 hours ago', attempts: 12 },
-            { ip: '172.16.0.1', reason: 'Multiple failed logins', blocked: '1 day ago', attempts: 28 }
-          ]
+          failedLogins: metricsData.security?.failedLogins || 0,
+          suspiciousActivity: metricsData.security?.suspiciousActivity || 0,
+          blockedIPs: metricsData.security?.blockedIPs || 0,
+          twoFactorEnabled: 0,
+          passwordResets: metricsData.security?.passwordResets || 0,
+          securityLogs,
+          blockedIPsList
         },
         platform: {
-          totalEvents: 456,
-          activeEvents: 34,
-          pendingApprovals: 7,
-          reportedIssues: 12,
-          resolvedIssues: 145,
-          averageResolutionTime: '2.4 hours',
-          pendingEvents: [
-            { id: 1, name: 'Tech Summit 2025', organizer: 'TechCorp', submitted: '2 hours ago', category: 'Technology', status: 'pending' },
-            { id: 2, name: 'Music Festival', organizer: 'EventPro', submitted: '5 hours ago', category: 'Music', status: 'pending' },
-            { id: 3, name: 'Art Exhibition', organizer: 'Gallery Inc', submitted: '1 day ago', category: 'Arts', status: 'pending' },
-            { id: 4, name: 'Food Expo', organizer: 'Culinary Co', submitted: '1 day ago', category: 'Food', status: 'pending' }
-          ]
+          totalEvents: metricsData.platform?.totalEvents || 0,
+          activeEvents: metricsData.platform?.activeEvents || 0,
+          pendingApprovals: metricsData.platform?.pendingApprovals || 0,
+          reportedIssues: 0,
+          resolvedIssues: 0,
+          averageResolutionTime: '0 hours',
+          pendingEvents
         },
         database: {
-          size: '24.5 GB',
-          backupStatus: 'completed',
-          lastBackup: '2 hours ago',
-          queries: 45678,
-          slowQueries: 12,
-          backupHistory: [
-            { date: '2024-11-08 02:00', size: '24.5 GB', duration: '12 min', status: 'success' },
-            { date: '2024-11-07 02:00', size: '24.2 GB', duration: '11 min', status: 'success' },
-            { date: '2024-11-06 02:00', size: '23.9 GB', duration: '10 min', status: 'success' },
-            { date: '2024-11-05 02:00', size: '23.6 GB', duration: '12 min', status: 'success' }
-          ]
+          size: metricsData.database?.size || '0 MB',
+          backupStatus: metricsData.database?.backupStatus || 'pending',
+          lastBackup: metricsData.database?.lastBackup || 'Never',
+          queries: 0,
+          slowQueries: 0,
+          backupHistory
         },
         settings: {
-          platformName: 'EventPro',
+          platformName: 'Ticket Hub',
           maintenanceMode: false,
           registrationEnabled: true,
           emailNotifications: true,
@@ -174,71 +254,73 @@ const AdminToolsDashboard = () => {
           maxUploadSize: '10 MB',
           sessionTimeout: '30 minutes'
         },
-        logs: [
-          { id: 1, timestamp: '2024-11-08 14:30:45', level: 'INFO', module: 'Auth', message: 'User login successful', user: 'john@example.com' },
-          { id: 2, timestamp: '2024-11-08 14:28:12', level: 'WARNING', module: 'Security', message: 'Failed login attempt', user: 'unknown' },
-          { id: 3, timestamp: '2024-11-08 14:25:33', level: 'INFO', module: 'Events', message: 'New event created', user: 'sarah@example.com' },
-          { id: 4, timestamp: '2024-11-08 14:20:18', level: 'ERROR', module: 'Database', message: 'Slow query detected', user: 'system' },
-          { id: 5, timestamp: '2024-11-08 14:15:42', level: 'INFO', module: 'Payment', message: 'Payment processed', user: 'mike@example.com' }
-        ],
-        recentActivity: [
-          { type: 'user_registered', user: 'John Smith', time: '5 min ago', status: 'success' },
-          { type: 'event_approved', user: 'Admin Team', time: '12 min ago', status: 'success' },
-          { type: 'failed_login', user: 'Unknown', time: '18 min ago', status: 'warning' },
-          { type: 'password_reset', user: 'Sarah Wilson', time: '25 min ago', status: 'info' },
-          { type: 'user_suspended', user: 'Admin Team', time: '1 hour ago', status: 'error' }
-        ],
-        alerts: [
-          { 
+        logs,
+        recentActivity,
+        alerts: alerts.length > 0 ? alerts : [
+          {
             id: 1,
-            type: 'security', 
-            title: 'Security Alert',
-            message: 'Multiple failed login attempts detected', 
-            severity: 'high', 
-            time: '10 min ago',
-            count: 23,
-            icon: 'AlertTriangle',
-            color: '#ef4444',
-            details: '23 failed login attempts from 5 different IP addresses in the last hour. 3 IPs have been automatically blocked.',
-            affectedItems: ['192.168.1.100', '10.0.0.50', '203.0.113.0'],
-            recommendations: ['Review security logs', 'Check IP block list', 'Enable 2FA for admin accounts']
-          },
-          { 
-            id: 2,
-            type: 'system', 
-            title: 'Backup Status',
-            message: 'Database backup completed successfully', 
-            severity: 'low', 
-            time: '2 hours ago',
+            type: 'system',
+            title: 'System Monitoring Active',
+            message: 'Metrics collection is running',
+            severity: 'low',
+            time: 'Just now',
             count: 1,
             icon: 'CheckCircle',
             color: '#10b981',
-            details: 'Automated nightly backup completed successfully. Backup size: 24.5 GB, Duration: 12 minutes. All tables backed up without errors.',
-            affectedItems: ['users_table', 'events_table', 'payments_table'],
-            recommendations: ['Verify backup integrity', 'Test restore process', 'Update backup schedule if needed']
-          },
-          { 
-            id: 3,
-            type: 'platform', 
-            title: 'Pending Events',
-            message: '7 events pending approval', 
-            severity: 'medium', 
-            time: '3 hours ago',
-            count: 7,
-            icon: 'Clock',
-            color: '#f59e0b',
-            details: '7 events are awaiting admin approval. Average wait time: 4.2 hours. 2 events have been waiting for more than 6 hours.',
-            affectedItems: ['Tech Summit 2025', 'Music Festival', 'Art Exhibition', 'Food Expo'],
-            recommendations: ['Review pending events', 'Set up auto-approval rules', 'Notify event organizers']
+            details: 'System metrics are being collected successfully.',
+            affectedItems: ['metrics_service'],
+            recommendations: ['Review collected metrics', 'Check system logs']
           }
         ]
       };
-
-      setAdminData(mockData);
+      
+      setAdminData(transformedData);
     } catch (error) {
       console.error('Error fetching admin data:', error);
+      setError(error.message);
+      // Fallback to minimal data structure
+      setAdminData({
+        systemHealth: { status: 'unknown', uptime: '0', lastIncident: 'Unknown', responseTime: '0' },
+        users: { total: 0, active: 0, inactive: 0, newThisWeek: 0, suspended: 0, admins: 0, eventManagers: 0, customers: 0, growthRate: 0, userList: [] },
+        security: { failedLogins: 0, suspiciousActivity: 0, blockedIPs: 0, twoFactorEnabled: 0, passwordResets: 0, securityLogs: [], blockedIPsList: [] },
+        platform: { totalEvents: 0, activeEvents: 0, pendingApprovals: 0, reportedIssues: 0, resolvedIssues: 0, averageResolutionTime: '0', pendingEvents: [] },
+        database: { size: '0', backupStatus: 'unknown', lastBackup: 'Never', queries: 0, slowQueries: 0, backupHistory: [] },
+        logs: [],
+        recentActivity: [],
+        alerts: []
+      });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Helper functions
+  const getAlertIcon = (type) => {
+    switch(type) {
+      case 'security': return 'AlertTriangle';
+      case 'system': return 'Database';
+      case 'platform': return 'Activity';
+      default: return 'AlertTriangle';
+    }
+  };
+
+  const getAlertColor = (severity) => {
+    switch(severity) {
+      case 'high': return '#ef4444';
+      case 'medium': return '#f59e0b';
+      case 'low': return '#10b981';
+      default: return '#6b7280';
+    }
+  };
+
+  const getActivityStatus = (type) => {
+    switch(type) {
+      case 'user_login':
+      case 'user_registered':
+      case 'event_approved': return 'success';
+      case 'failed_login': return 'warning';
+      case 'user_suspended': return 'error';
+      default: return 'info';
     }
   };
 
@@ -349,16 +431,26 @@ const AdminToolsDashboard = () => {
                         <span>View Security Logs</span>
                       </div>
                     </button>
-                    <button className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`${API_URL}/api/metrics/blocked-ips`);
+                          if (response.ok) {
+                            const data = await response.json();
+                            if (data.success) {
+                              alert(`Found ${data.data.length} blocked IPs`);
+                            }
+                          }
+                          setModalOpen(false);
+                        } catch (err) {
+                          console.error('Error fetching blocked IPs:', err);
+                        }
+                      }}
+                      className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                    >
                       <div className="flex items-center gap-3">
                         <Icon name="Ban" size={16} color="#ef4444" />
-                        <span>Block Suspicious IPs</span>
-                      </div>
-                    </button>
-                    <button className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <Icon name="AlertTriangle" size={16} color="#ef4444" />
-                        <span>Review Failed Logins</span>
+                        <span>View Blocked IPs</span>
                       </div>
                     </button>
                   </>
@@ -374,47 +466,7 @@ const AdminToolsDashboard = () => {
                     >
                       <div className="flex items-center gap-3">
                         <Icon name="Database" size={16} color="#10b981" />
-                        <span>View Backup History</span>
-                      </div>
-                    </button>
-                    <button className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <Icon name="Settings" size={16} color="#10b981" />
-                        <span>Schedule New Backup</span>
-                      </div>
-                    </button>
-                    <button className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <Icon name="Download" size={16} color="#10b981" />
-                        <span>Download Latest Backup</span>
-                      </div>
-                    </button>
-                  </>
-                )}
-                {alert.type === 'platform' && (
-                  <>
-                    <button 
-                      onClick={() => {
-                        setCurrentView('approvals');
-                        setModalOpen(false);
-                      }}
-                      className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Icon name="CheckCircle" size={16} color="#f59e0b" />
-                        <span>Review Pending Events</span>
-                      </div>
-                    </button>
-                    <button className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <Icon name="Users" size={16} color="#f59e0b" />
-                        <span>Bulk Approve Events</span>
-                      </div>
-                    </button>
-                    <button className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <Icon name="Activity" size={16} color="#f59e0b" />
-                        <span>View Event Queue</span>
+                        <span>View Database Metrics</span>
                       </div>
                     </button>
                   </>
@@ -437,20 +489,12 @@ const AdminToolsDashboard = () => {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Count:</span>
-                  <span className="font-medium text-gray-900">{alert.count}</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-gray-600">Type:</span>
                   <span className="font-medium text-gray-900 capitalize">{alert.type}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Time:</span>
                   <span className="font-medium text-gray-900">{alert.time}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Status:</span>
-                  <span className="font-medium text-yellow-600">Active</span>
                 </div>
               </div>
 
@@ -472,21 +516,23 @@ const AdminToolsDashboard = () => {
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button 
-              onClick={() => setModalOpen(false)}
+              onClick={() => {
+                // Acknowledge alert via API
+                if (alert.id) {
+                  fetch(`${API_URL}/api/metrics/alert/${alert.id}/acknowledge`, {
+                    method: 'PUT',
+                    headers: {
+                      'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+                      'Content-Type': 'application/json'
+                    }
+                  });
+                }
+                setModalOpen(false);
+                fetchAdminData(); // Refresh data
+              }}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
             >
-              Dismiss Alert
-            </button>
-            <button 
-              onClick={() => {
-                if (alert.type === 'security') setCurrentView('security');
-                if (alert.type === 'platform') setCurrentView('approvals');
-                if (alert.type === 'system') setCurrentView('database');
-                setModalOpen(false);
-              }}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
-            >
-              View Full Details
+              Acknowledge Alert
             </button>
           </div>
         </div>
@@ -522,66 +568,6 @@ const AdminToolsDashboard = () => {
     );
   };
 
-  // Open modal with user details
-  const openUserModal = (user) => {
-    setModalTitle('User Details');
-    setModalContent(
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Personal Information</h3>
-            <div className="space-y-2">
-              <p><span className="font-medium">Name:</span> {user.name}</p>
-              <p><span className="font-medium">Email:</span> {user.email}</p>
-              <p><span className="font-medium">Role:</span> {user.role}</p>
-              <p><span className="font-medium">Status:</span> 
-                <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${
-                  user.status === 'active' ? 'bg-green-100 text-green-800' :
-                  user.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {user.status}
-                </span>
-              </p>
-            </div>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Activity Information</h3>
-            <div className="space-y-2">
-              <p><span className="font-medium">Joined:</span> {user.joined}</p>
-              <p><span className="font-medium">Last Active:</span> {user.lastActive}</p>
-              <p><span className="font-medium">User ID:</span> {user.id}</p>
-            </div>
-          </div>
-        </div>
-        <div className="border-t pt-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Quick Actions</h3>
-          <div className="flex flex-wrap gap-2">
-            <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-              Send Message
-            </button>
-            <button className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-              Reset Password
-            </button>
-            <button className="bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-yellow-700 transition-colors">
-              Edit Profile
-            </button>
-            {user.status === 'suspended' ? (
-              <button className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-                Activate User
-              </button>
-            ) : (
-              <button className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                Suspend User
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-    setModalOpen(true);
-  };
-
   // Dashboard View Components
   const SystemHealthCard = ({ title, value, status, icon, color, onClick }) => (
     <div 
@@ -601,150 +587,6 @@ const AdminToolsDashboard = () => {
       </div>
     </div>
   );
-
-  const openHealthModal = (item) => {
-    const statusConfig = {
-      healthy: { label: 'Operational', color: 'green' },
-      warning: { label: 'Degraded', color: 'yellow' },
-      issues: { label: 'Issues', color: 'red' }
-    };
-    const config = statusConfig[item.status];
-
-    let targetView = '';
-    if (item.title === 'Uptime' || item.title === 'Response Time' || item.title === 'Last Incident') {
-      targetView = 'logs';
-    } else if (item.title === 'Database') {
-      targetView = 'database';
-    }
-
-    setModalTitle(item.title);
-    setModalContent(
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center`} style={{ backgroundColor: `${item.color}20` }}>
-            <Icon name={item.icon} size={24} color={item.color} />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">{item.title}</h3>
-            <p className="text-sm text-gray-500">Current status: {config.label}</p>
-          </div>
-        </div>
-        
-        {/* Details */}
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <p className="text-sm text-gray-700">{item.details}</p>
-        </div>
-
-        {/* Affected Items */}
-        <div>
-          <h4 className="font-semibold text-gray-900 mb-2">Affected Components</h4>
-          <div className="flex flex-wrap gap-2">
-            {item.affectedItems?.map((comp, index) => (
-              <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                {comp}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Quick Actions */}
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Quick Actions</h4>
-            <div className="space-y-2">
-              <button 
-                onClick={() => {
-                  if (targetView) setCurrentView(targetView);
-                  setModalOpen(false);
-                }}
-                className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-              >
-                <div className="flex items-center gap-3">
-                  <Icon name="Activity" size={16} color={item.color} />
-                  <span>View Related Logs</span>
-                </div>
-              </button>
-              <button className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
-                <div className="flex items-center gap-3">
-                  <Icon name="Settings" size={16} color={item.color} />
-                  <span>Run Diagnostics</span>
-                </div>
-              </button>
-              {item.title === 'Database' && (
-                <button 
-                  onClick={() => {
-                    setCurrentView('database');
-                    setModalOpen(false);
-                  }}
-                  className="w-full text-left p-3 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon name="Database" size={16} color={item.color} />
-                    <span>Manage Database</span>
-                  </div>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Status Details */}
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Status Details</h4>
-            <div className="space-y-3 text-sm bg-gray-50 p-4 rounded-lg">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Status:</span>
-                <span className={`font-medium ${
-                  item.status === 'healthy' ? 'text-green-600' :
-                  item.status === 'warning' ? 'text-yellow-600' :
-                  'text-red-600'
-                }`}>
-                  {config.label}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Value:</span>
-                <span className="font-medium text-gray-900">{item.value}</span>
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="mt-4">
-              <h4 className="font-semibold text-gray-900 mb-2">Recommendations</h4>
-              <ul className="space-y-1 text-sm text-gray-600">
-                {item.recommendations?.map((rec, index) => (
-                  <li key={index} className="flex items-center gap-2">
-                    <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
-                    {rec}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <button 
-            onClick={() => setModalOpen(false)}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-          >
-            Close
-          </button>
-          <button 
-            onClick={() => {
-              if (targetView) setCurrentView(targetView);
-              setModalOpen(false);
-            }}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
-          >
-            View Full Details
-          </button>
-        </div>
-      </div>
-    );
-    setModalOpen(true);
-  };
 
   const QuickActionCard = ({ title, description, icon, color, onClick }) => (
     <button
@@ -776,7 +618,8 @@ const AdminToolsDashboard = () => {
       event_approved: 'CheckCircle',
       failed_login: 'AlertTriangle',
       password_reset: 'Lock',
-      user_suspended: 'UserX'
+      user_suspended: 'UserX',
+      user_login: 'UserCheck'
     };
 
     const iconName = typeIcons[activity.type] || 'Activity';
@@ -788,7 +631,7 @@ const AdminToolsDashboard = () => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900">{activity.user}</p>
-          <p className="text-xs text-gray-500 capitalize">{activity.type.replace(/_/g, ' ')}</p>
+          <p className="text-xs text-gray-500 capitalize">{activity.type?.replace(/_/g, ' ') || 'Activity'}</p>
         </div>
         <span className="text-xs text-gray-400 whitespace-nowrap">{activity.time}</span>
       </div>
@@ -879,7 +722,6 @@ const AdminToolsDashboard = () => {
                   <tr 
                     key={user.id} 
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => openUserModal(user)}
                   >
                     <td className="px-4 py-4">
                       <div>
@@ -903,21 +745,8 @@ const AdminToolsDashboard = () => {
                     <td className="px-4 py-4 text-sm text-gray-500">{user.lastActive}</td>
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openUserModal(user);
-                          }}
-                        >
-                          <Icon name="Edit" size={16} color="#4b5563" />
-                        </button>
                         <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                          {user.status === 'suspended' ? (
-                            <Icon name="Unlock" size={16} color="#10b981" />
-                          ) : (
-                            <Icon name="Ban" size={16} color="#ef4444" />
-                          )}
+                          <Icon name="Edit" size={16} color="#4b5563" />
                         </button>
                       </div>
                     </td>
@@ -948,12 +777,12 @@ const AdminToolsDashboard = () => {
           <p className="text-2xl font-bold text-amber-600">{adminData?.security?.blockedIPs}</p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-          <p className="text-sm text-gray-500 mb-1">2FA Enabled</p>
-          <p className="text-2xl font-bold text-green-600">{adminData?.security?.twoFactorEnabled}%</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
           <p className="text-sm text-gray-500 mb-1">Suspicious Activity</p>
           <p className="text-2xl font-bold text-red-600">{adminData?.security?.suspiciousActivity}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+          <p className="text-sm text-gray-500 mb-1">Password Resets</p>
+          <p className="text-2xl font-bold text-indigo-600">{adminData?.security?.passwordResets}</p>
         </div>
       </div>
 
@@ -989,7 +818,25 @@ const AdminToolsDashboard = () => {
               <div key={idx} className="p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-mono font-medium text-gray-900">{item.ip}</p>
-                  <button className="text-xs text-red-600 hover:text-red-700 font-medium">Unblock</button>
+                  <button 
+                    onClick={async () => {
+                      try {
+                        await fetch(`${API_URL}/api/metrics/blocked-ip/${item.ip}`, {
+                          method: 'DELETE',
+                          headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+                            'Content-Type': 'application/json'
+                          }
+                        });
+                        fetchAdminData(); // Refresh data
+                      } catch (err) {
+                        console.error('Error unblocking IP:', err);
+                      }
+                    }}
+                    className="text-xs text-green-600 hover:text-green-700 font-medium"
+                  >
+                    Unblock
+                  </button>
                 </div>
                 <p className="text-xs text-gray-600">{item.reason}</p>
                 <p className="text-xs text-gray-400 mt-1">{item.attempts} attempts • Blocked {item.blocked}</p>
@@ -1036,9 +883,6 @@ const AdminToolsDashboard = () => {
                       <Icon name="XCircle" size={16} />
                       Reject
                     </button>
-                    <button className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                      View Details
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1062,41 +906,20 @@ const AdminToolsDashboard = () => {
           <p className="text-2xl font-bold text-gray-900">{adminData?.database?.size}</p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-          <p className="text-sm text-gray-500 mb-1">Total Queries</p>
-          <p className="text-2xl font-bold text-indigo-600">{adminData?.database?.queries?.toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-          <p className="text-sm text-gray-500 mb-1">Slow Queries</p>
-          <p className="text-2xl font-bold text-amber-600">{adminData?.database?.slowQueries}</p>
+          <p className="text-sm text-gray-500 mb-1">Backup Status</p>
+          <p className="text-2xl font-bold text-green-600 capitalize">{adminData?.database?.backupStatus}</p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
           <p className="text-sm text-gray-500 mb-1">Last Backup</p>
-          <p className="text-sm font-bold text-green-600">{adminData?.database?.lastBackup}</p>
+          <p className="text-2xl font-bold text-blue-600">{adminData?.database?.lastBackup}</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Quick Actions</h3>
-        </div>
-        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button className="p-4 border-2 border-indigo-600 text-indigo-600 rounded-lg font-medium hover:bg-indigo-50 transition-colors hover:scale-[1.02] active:scale-[0.98]">
-            Create Backup Now
-          </button>
-          <button className="p-4 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors hover:scale-[1.02] active:scale-[0.98]">
-            Optimize Tables
-          </button>
-          <button className="p-4 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors hover:scale-[1.02] active:scale-[0.98]">
-            View Full Logs
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
           <h3 className="font-semibold text-gray-900">Backup History</h3>
         </div>
-        <div className="overflow-auto flex-1">
+        <div className="overflow-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
               <tr>
@@ -1104,7 +927,7 @@ const AdminToolsDashboard = () => {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Size</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Duration</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -1114,15 +937,15 @@ const AdminToolsDashboard = () => {
                   <td className="px-4 py-4 text-sm text-gray-900">{backup.size}</td>
                   <td className="px-4 py-4 text-sm text-gray-900">{backup.duration}</td>
                   <td className="px-4 py-4">
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      backup.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      backup.status === 'failed' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
                       {backup.status}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-right">
-                    <button className="text-indigo-600 hover:text-indigo-700 text-sm font-medium">
-                      <Icon name="Download" size={16} className="inline" />
-                    </button>
-                  </td>
+                  <td className="px-4 py-4 text-sm text-gray-900 capitalize">{backup.type}</td>
                 </tr>
               ))}
             </tbody>
@@ -1153,7 +976,6 @@ const AdminToolsDashboard = () => {
             <option>Security</option>
             <option>Events</option>
             <option>Database</option>
-            <option>Payment</option>
           </select>
           <div className="flex-1"></div>
           <button className="w-full sm:w-auto flex items-center gap-2 px-4 py-2 text-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors">
@@ -1200,113 +1022,6 @@ const AdminToolsDashboard = () => {
     </div>
   );
 
-  const SettingsView = () => (
-    <div className="space-y-6 h-full flex flex-col">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Platform Settings</h2>
-        <p className="text-sm text-gray-500 mt-1">Configure platform-wide settings</p>
-      </div>
-
-      <div className="space-y-6 flex-1 overflow-auto pr-2">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">General Settings</h3>
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Platform Name</p>
-                <p className="text-sm text-gray-500">The name displayed across the platform</p>
-              </div>
-              <input
-                type="text"
-                defaultValue={adminData?.settings?.platformName}
-                className="w-full sm:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Maintenance Mode</p>
-                <p className="text-sm text-gray-500">Temporarily disable public access</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked={adminData?.settings?.maintenanceMode} className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">Security Settings</h3>
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">User Registration</p>
-                <p className="text-sm text-gray-500">Allow new users to register</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked={adminData?.settings?.registrationEnabled} className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Two-Factor Authentication</p>
-                <p className="text-sm text-gray-500">Require 2FA for all users</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked={adminData?.settings?.twoFactorRequired} className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Session Timeout</p>
-                <p className="text-sm text-gray-500">Auto logout after inactivity</p>
-              </div>
-              <select className="w-full sm:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option>15 minutes</option>
-                <option selected>30 minutes</option>
-                <option>1 hour</option>
-                <option>2 hours</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">Notification Settings</h3>
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Email Notifications</p>
-                <p className="text-sm text-gray-500">Send system email notifications</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked={adminData?.settings?.emailNotifications} className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-3 sticky bottom-0 bg-gray-50 p-4 rounded-lg mt-4">
-        <button className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">
-          Cancel
-        </button>
-        <button className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors">
-          Save Changes
-        </button>
-      </div>
-    </div>
-  );
-
   if (loading) {
     return (
       <div className="h-screen-dynamic bg-gray-50 flex items-center justify-center">
@@ -1315,6 +1030,7 @@ const AdminToolsDashboard = () => {
             <Icon name="RefreshCw" size={32} color="#6366f1" />
           </div>
           <p className="text-gray-600">Loading admin dashboard...</p>
+          {error && <p className="text-red-500 text-sm mt-2">Error: {error}</p>}
         </div>
       </div>
     );
@@ -1323,43 +1039,31 @@ const AdminToolsDashboard = () => {
   const healthItems = [
     {
       title: 'Uptime',
-      value: adminData?.systemHealth?.uptime || '99.8%',
-      status: 'healthy',
+      value: adminData?.systemHealth?.uptime || '0 days',
+      status: adminData?.systemHealth?.status || 'unknown',
       icon: 'Activity',
       color: '#10b981',
-      details: 'System uptime is calculated based on the last 30 days of operation. Current status is optimal with no downtime recorded in the past week.',
-      affectedItems: ['Web Server', 'Database Server', 'API Endpoints'],
-      recommendations: ['Monitor server logs', 'Check resource usage', 'Schedule maintenance']
     },
     {
       title: 'Response Time',
-      value: adminData?.systemHealth?.responseTime || '145ms',
+      value: adminData?.systemHealth?.responseTime || '0 ms',
       status: 'healthy',
       icon: 'TrendingUp',
       color: '#6366f1',
-      details: 'Average response time for API calls and page loads. Measured over the last 24 hours. Current performance is within acceptable limits.',
-      affectedItems: ['Frontend', 'Backend API', 'Database Queries'],
-      recommendations: ['Optimize slow queries', 'Check network latency', 'Scale resources if needed']
     },
     {
       title: 'Database',
-      value: adminData?.database?.size || '24.5 GB',
+      value: adminData?.database?.size || '0 MB',
       status: 'healthy',
       icon: 'Database',
       color: '#f59e0b',
-      details: 'Current database size and status. Includes all tables and indexes. Growth rate is normal.',
-      affectedItems: ['Users Table', 'Events Table', 'Logs Table'],
-      recommendations: ['Run optimization', 'Check disk space', 'Schedule backups']
     },
     {
       title: 'Last Incident',
-      value: adminData?.systemHealth?.lastIncident || '12 days ago',
+      value: adminData?.systemHealth?.lastIncident || 'No incidents',
       status: 'healthy',
       icon: 'Clock',
       color: '#ec4899',
-      details: 'Time since the last system incident or downtime. No major issues reported recently.',
-      affectedItems: ['None'],
-      recommendations: ['Review incident reports', 'Update emergency procedures', 'Test failover']
     }
   ];
 
@@ -1399,30 +1103,25 @@ const AdminToolsDashboard = () => {
                   {currentView === 'approvals' && 'Review and approve events'}
                   {currentView === 'database' && 'Database operations'}
                   {currentView === 'logs' && 'System activity logs'}
-                  {currentView === 'settings' && 'Platform configuration'}
                 </p>
               </div>
             </div>
-            {currentView === 'dashboard' && (
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:flex gap-2 bg-gray-100 p-1 rounded-lg">
-                  {['today', 'week', 'month'].map((range) => (
-                    <button
-                      key={range}
-                      onClick={() => setTimeRange(range)}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${
-                        timeRange === range
-                          ? 'bg-white text-indigo-600 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      {range.charAt(0).toUpperCase() + range.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchAdminData}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Refresh data"
+              >
+                <Icon name="RefreshCw" size={20} color="#4b5563" />
+              </button>
+            </div>
           </div>
+          {error && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+              <p className="text-red-600 text-sm">API Error: {error}</p>
+              <p className="text-red-500 text-xs">Check if backend is running on {API_URL}</p>
+            </div>
+          )}
         </div>
 
         {/* Main Content */}
@@ -1430,28 +1129,28 @@ const AdminToolsDashboard = () => {
           <div className="p-4 sm:p-6 h-full overflow-auto">
             {currentView === 'dashboard' && (
               <div className="space-y-6 h-full">
-                {/* Debug Info - Remove in production */}
-                {!adminData?.alerts && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-red-800 text-sm">
-                      No alerts data found. Check the mockData structure in fetchAdminData.
-                    </p>
-                  </div>
-                )}
-
                 {/* Updated Alert Cards Section */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-gray-900">System Alerts</h2>
                     <div className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full">
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                      <span className="text-xs font-semibold text-blue-700">ACTIVE ALERTS</span>
+                      <span className="text-xs font-semibold text-blue-700">SYSTEM MONITORING</span>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {adminData?.alerts?.map((alert) => (
                       <AlertCard key={alert.id} alert={alert} />
                     ))}
+                    {(!adminData?.alerts || adminData.alerts.length === 0) && (
+                      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="text-center py-8">
+                          <Icon name="CheckCircle" size={48} color="#10b981" className="mx-auto mb-4" />
+                          <p className="text-gray-600">No active alerts</p>
+                          <p className="text-sm text-gray-500">System is running normally</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1461,12 +1160,12 @@ const AdminToolsDashboard = () => {
                     <h2 className="text-xl font-bold text-gray-900">System Health</h2>
                     <div className="flex items-center gap-2 bg-green-50 px-3 py-1 rounded-full">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                      <span className="text-xs font-semibold text-green-700">ALL SYSTEMS OPERATIONAL</span>
+                      <span className="text-xs font-semibold text-green-700">SYSTEM STATUS</span>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {healthItems.map((item) => (
-                      <SystemHealthCard key={item.title} {...item} onClick={() => openHealthModal(item)} />
+                      <SystemHealthCard key={item.title} {...item} />
                     ))}
                   </div>
                 </div>
@@ -1490,13 +1189,6 @@ const AdminToolsDashboard = () => {
                       onClick={() => setCurrentView('security')}
                     />
                     <QuickActionCard
-                      title="Platform Settings"
-                      description="Configure platform-wide settings"
-                      icon="Settings"
-                      color="#10b981"
-                      onClick={() => setCurrentView('settings')}
-                    />
-                    <QuickActionCard
                       title="Event Approvals"
                       description={`${adminData?.platform?.pendingApprovals || 0} events pending review`}
                       icon="CheckCircle"
@@ -1505,7 +1197,7 @@ const AdminToolsDashboard = () => {
                     />
                     <QuickActionCard
                       title="Database Management"
-                      description="Backups, optimization, and maintenance"
+                      description="Backups and maintenance"
                       icon="Database"
                       color="#8b5cf6"
                       onClick={() => setCurrentView('database')}
@@ -1534,14 +1226,14 @@ const AdminToolsDashboard = () => {
                           <Icon name="Users" size={20} color="#6366f1" />
                           <span className="text-sm font-medium text-gray-700">Total Users</span>
                         </div>
-                        <span className="text-lg font-bold text-gray-900">{adminData?.users?.total?.toLocaleString()}</span>
+                        <span className="text-lg font-bold text-gray-900">{adminData?.users?.total}</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                         <div className="flex items-center gap-3">
                           <Icon name="UserCheck" size={20} color="#10b981" />
                           <span className="text-sm font-medium text-gray-700">Active Users</span>
                         </div>
-                        <span className="text-lg font-bold text-green-600">{adminData?.users?.active?.toLocaleString()}</span>
+                        <span className="text-lg font-bold text-green-600">{adminData?.users?.active}</span>
                       </div>
                       <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                         <div className="flex items-center gap-3">
@@ -1583,13 +1275,6 @@ const AdminToolsDashboard = () => {
                       </div>
                       <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                         <div className="flex items-center gap-3">
-                          <Icon name="Lock" size={20} color="#10b981" />
-                          <span className="text-sm font-medium text-gray-700">2FA Enabled</span>
-                        </div>
-                        <span className="text-lg font-bold text-green-600">{adminData?.security?.twoFactorEnabled}%</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center gap-3">
                           <Icon name="Mail" size={20} color="#6366f1" />
                           <span className="text-sm font-medium text-gray-700">Password Resets</span>
                         </div>
@@ -1609,6 +1294,11 @@ const AdminToolsDashboard = () => {
                     {adminData?.recentActivity?.map((activity, idx) => (
                       <ActivityItem key={idx} activity={activity} />
                     ))}
+                    {(!adminData?.recentActivity || adminData.recentActivity.length === 0) && (
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">No recent activity</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1619,7 +1309,6 @@ const AdminToolsDashboard = () => {
             {currentView === 'approvals' && <EventApprovalsView />}
             {currentView === 'database' && <DatabaseManagementView />}
             {currentView === 'logs' && <SystemLogsView />}
-            {currentView === 'settings' && <SettingsView />}
           </div>
         </div>
       </div>

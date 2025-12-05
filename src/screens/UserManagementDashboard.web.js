@@ -1,4 +1,4 @@
-// src/screens/UserManagementDashboard.web.js - FIXED DATE HANDLING VERSION
+// src/screens/UserManagementDashboard.web.js - FIXED WITH ALL STYLE FIXES
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -53,14 +53,13 @@ if (typeof document !== 'undefined' && !document.getElementById('tailwind-cdn'))
       outline: none !important;
     }
     /* Remove problematic React Native Web props */
-    [style*="shadow"] { 
+    [style*="shadowOffset"] { 
       box-shadow: none !important;
+    }
+    [style*="textShadowOffset"] { 
       text-shadow: none !important;
     }
-    [style*="textShadow"] { 
-      text-shadow: none !important;
-    }
-    [style*="outline"] { 
+    [style*="outlineWidth"] { 
       outline: none !important;
     }
   `;
@@ -105,18 +104,76 @@ const iconMap = {
   SwapHorizontal: 'swap-horizontal'
 };
 
+// FIXED Icon component with proper style handling
 const Icon = ({ name, size = 20, color = '#000', style = {}, className = '' }) => {
   const iconName = iconMap[name] || name;
-  // Remove problematic style props
+  
+  // Create a safe style object without React Native Web warnings
   const safeStyle = { ...style };
-  delete safeStyle.shadowColor;
-  delete safeStyle.shadowOffset;
-  delete safeStyle.shadowOpacity;
-  delete safeStyle.shadowRadius;
-  delete safeStyle.textShadowColor;
-  delete safeStyle.textShadowOffset;
-  delete safeStyle.textShadowRadius;
-  delete safeStyle.outline;
+  
+  // Convert React Native shadow props to CSS boxShadow if present
+  if (safeStyle.shadowColor || safeStyle.shadowOffset || safeStyle.shadowOpacity || safeStyle.shadowRadius) {
+    const shadowColor = safeStyle.shadowColor || 'rgba(0, 0, 0, 0.25)';
+    const offset = safeStyle.shadowOffset || { width: 0, height: 2 };
+    const radius = safeStyle.shadowRadius || 3;
+    const opacity = safeStyle.shadowOpacity || 0.25;
+    
+    // Convert RGBA color with opacity
+    let rgbaColor;
+    if (shadowColor.startsWith('rgba')) {
+      rgbaColor = shadowColor;
+    } else if (shadowColor.startsWith('rgb')) {
+      rgbaColor = shadowColor.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+    } else {
+      // Handle hex or named colors
+      rgbaColor = `rgba(0, 0, 0, ${opacity})`;
+    }
+    
+    safeStyle.boxShadow = `${offset.width}px ${offset.height}px ${radius}px ${rgbaColor}`;
+    
+    // Remove the original props
+    delete safeStyle.shadowColor;
+    delete safeStyle.shadowOffset;
+    delete safeStyle.shadowOpacity;
+    delete safeStyle.shadowRadius;
+  }
+  
+  // Convert text shadow props if present
+  if (safeStyle.textShadowColor || safeStyle.textShadowOffset || safeStyle.textShadowRadius) {
+    const color = safeStyle.textShadowColor || 'rgba(0, 0, 0, 0.75)';
+    const offset = safeStyle.textShadowOffset || { width: 0, height: 1 };
+    const radius = safeStyle.textShadowRadius || 1;
+    
+    safeStyle.textShadow = `${offset.width}px ${offset.height}px ${radius}px ${color}`;
+    
+    delete safeStyle.textShadowColor;
+    delete safeStyle.textShadowOffset;
+    delete safeStyle.textShadowRadius;
+  }
+  
+  // Handle outline
+  if (safeStyle.outlineWidth || safeStyle.outlineColor || safeStyle.outlineStyle) {
+    const width = safeStyle.outlineWidth || '1px';
+    const color = safeStyle.outlineColor || 'currentColor';
+    const style = safeStyle.outlineStyle || 'solid';
+    
+    safeStyle.outline = `${width} ${style} ${color}`;
+    
+    delete safeStyle.outlineWidth;
+    delete safeStyle.outlineColor;
+    delete safeStyle.outlineStyle;
+  }
+  
+  // Remove any remaining problematic props
+  const excludedProps = ['shadowOffset', 'shadowRadius', 'shadowColor', 'shadowOpacity', 
+                         'textShadowOffset', 'textShadowRadius', 'textShadowColor',
+                         'outlineWidth', 'outlineColor', 'outlineStyle', 'outline'];
+  
+  excludedProps.forEach(prop => {
+    if (safeStyle[prop]) {
+      delete safeStyle[prop];
+    }
+  });
   
   return (
     <span className={className} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...safeStyle }}>
@@ -297,6 +354,7 @@ const UserManagementDashboard = () => {
   const [userData, setUserData] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [error, setError] = useState(null);
   
   // Modals state
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
@@ -465,41 +523,45 @@ const UserManagementDashboard = () => {
   // ===================================================================
   const fetchUserData = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/users/dashboard`, {
+      setLoading(true);
+      setError(null);
+
+      const token = localStorage.getItem('token') || TOKEN;
+      if (!token) {
+        setError('No authentication token found. Please log in as admin/manager.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Fetching dashboard with token:', token ? 'Token exists' : 'No token');
+
+      const response = await fetch(`${API_BASE}/api/admin/users/dashboard`, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${TOKEN}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
       });
 
-      const json = await res.json();
-      if (json.success && json.data) {
-        // Process users with proper date handling
-        const processedUserList = json.data.userList?.map(user => ({
-          ...user,
-          // Ensure we have display-friendly dates
-          displayLastActive: formatUserLastActive(user),
-          displayJoined: user.joined || 'Unknown'
-        })) || [];
+      const data = await response.json();
 
-        // Process recent activity
-        const processedRecentActivity = json.data.recentActivity?.map(activity => ({
-          ...activity,
-          // Ensure time is properly formatted
-          displayTime: formatTimeDisplay(activity.time)
-        })) || [];
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('Session expired. Please log in again.');
+          localStorage.removeItem('token');
+          return;
+        }
+        throw new Error(data.error || 'Failed to load data');
+      }
 
-        setUserData({
-          ...json.data,
-          userList: processedUserList,
-          recentActivity: processedRecentActivity
-        });
+      if (data.success && data.data) {
+        setUserData(data.data);
       } else {
-        showAlert('Error', json.error || 'Failed to load dashboard data');
+        setError('Invalid response from server');
       }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
-      showAlert('Connection Error', 'Failed to connect to backend. Is the server running?');
+      setError('Failed to connect to server. Is backend running on port 8081?');
     } finally {
       setLoading(false);
     }
@@ -517,16 +579,11 @@ const UserManagementDashboard = () => {
   };
 
   useEffect(() => {
-    if (TOKEN) {
-      fetchUserData();
-    } else {
-      showAlert('Authentication Required', 'No authentication token found. Please log in as admin/manager.');
-      setLoading(false);
-    }
+    fetchUserData();
   }, []);
 
   // ===================================================================
-  // USER ACTION FUNCTIONS (unchanged from original)
+  // USER ACTION FUNCTIONS
   // ===================================================================
   
   // 1. DELETE USER FUNCTION
@@ -571,10 +628,11 @@ Type "DELETE" to confirm:`,
     try {
       console.log(`Deleting user ${selectedUser.id} from database`);
       
+      const token = localStorage.getItem('token') || TOKEN;
       const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}/delete`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${TOKEN}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -661,10 +719,11 @@ Type "DELETE" to confirm:`,
         try {
           console.log(`Changing role for user ${selectedUser.id} to ${changeRoleData.newRole}`);
           
+          const token = localStorage.getItem('token') || TOKEN;
           const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}/change-role`, {
             method: 'PUT',
             headers: {
-              'Authorization': `Bearer ${TOKEN}`,
+              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
@@ -762,10 +821,11 @@ Type "DELETE" to confirm:`,
         setActionLoading(prev => ({ ...prev, suspend: true }));
 
         try {
+          const token = localStorage.getItem('token') || TOKEN;
           const res = await fetch(`${API_BASE}/api/admin/users/${userId}/suspend`, {
             method: 'PUT',
             headers: {
-              'Authorization': `Bearer ${TOKEN}`,
+              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ action })
@@ -843,10 +903,11 @@ Type "DELETE" to confirm:`,
         setActionLoading(prev => ({ ...prev, edit: true }));
 
         try {
+          const token = localStorage.getItem('token') || TOKEN;
           const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}/update`, {
             method: 'PUT',
             headers: {
-              'Authorization': `Bearer ${TOKEN}`,
+              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify(editUserData)
@@ -926,10 +987,11 @@ Type "DELETE" to confirm:`,
         setActionLoading(prev => ({ ...prev, reset: true }));
 
         try {
+          const token = localStorage.getItem('token') || TOKEN;
           const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}/reset-password`, {
             method: 'PUT',
             headers: {
-              'Authorization': `Bearer ${TOKEN}`,
+              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ newPassword: resetPasswordData.newPassword })
@@ -977,10 +1039,11 @@ Type "DELETE" to confirm:`,
         setActionLoading(prev => ({ ...prev, send: true }));
 
         try {
+          const token = localStorage.getItem('token') || TOKEN;
           const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}/send-message`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${TOKEN}`,
+              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify(messageData)
@@ -1044,10 +1107,11 @@ Type "DELETE" to confirm:`,
         setCreateUserLoading(true);
         
         try {
+          const token = localStorage.getItem('token') || TOKEN;
           const res = await fetch(`${API_BASE}/api/admin/users/create`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${TOKEN}`,
+              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -1246,12 +1310,30 @@ Type "DELETE" to confirm:`,
     );
   }
 
+  if (error) {
+    return (
+      <div className="h-screen-full flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md">
+          <Icon name="AlertTriangle" size={64} color="#ef4444" />
+          <div className="mt-4 text-xl font-bold text-gray-800">Failed to load data</div>
+          <div className="mt-2 text-gray-600">{error}</div>
+          <button 
+            onClick={fetchUserData}
+            className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!userData) {
     return (
       <div className="h-screen-full flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <Icon name="AlertTriangle" size={64} color="#ef4444" />
-          <div className="mt-4 text-xl font-bold text-gray-800">Failed to load data</div>
+          <div className="mt-4 text-xl font-bold text-gray-800">No data available</div>
         </div>
       </div>
     );
@@ -1292,8 +1374,16 @@ Type "DELETE" to confirm:`,
                       <div className="text-sm text-gray-500">{stat.label}</div>
                       <div className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</div>
                     </div>
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-${stat.color}-100`}>
-                      <Icon name={stat.icon} size={28} color={`#${stat.color === 'indigo' ? '6366f1' : stat.color === 'green' ? '10b981' : stat.color === 'blue' ? '3b82f6' : 'ef4444'}`} />
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      stat.color === 'indigo' ? 'bg-indigo-100' :
+                      stat.color === 'green' ? 'bg-green-100' :
+                      stat.color === 'blue' ? 'bg-blue-100' : 'bg-red-100'
+                    }`}>
+                      <Icon name={stat.icon} size={28} color={
+                        stat.color === 'indigo' ? '#6366f1' :
+                        stat.color === 'green' ? '#10b981' :
+                        stat.color === 'blue' ? '#3b82f6' : '#ef4444'
+                      } />
                     </div>
                   </div>
                 </div>
@@ -1387,7 +1477,7 @@ Type "DELETE" to confirm:`,
           MODALS
       =================================================================== */}
 
-      {/* 1. CREATE USER MODAL (unchanged) */}
+      {/* 1. CREATE USER MODAL */}
       <Modal isOpen={showCreateUserModal} onClose={() => { setShowCreateUserModal(false); resetCreateUserForm(); }} title="Create New User" wide={true}>
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1557,7 +1647,7 @@ Type "DELETE" to confirm:`,
         )}
       </Modal>
 
-      {/* 3. EDIT USER MODAL (unchanged) */}
+      {/* 3. EDIT USER MODAL */}
       <Modal isOpen={showEditUserModal} onClose={() => setShowEditUserModal(false)} title="Edit User Profile" wide={true}>
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1603,7 +1693,7 @@ Type "DELETE" to confirm:`,
         </div>
       </Modal>
 
-      {/* 4. CHANGE ROLE MODAL (unchanged) */}
+      {/* 4. CHANGE ROLE MODAL */}
       <Modal isOpen={showChangeRoleModal} onClose={() => setShowChangeRoleModal(false)} title="Change User Role">
         <div className="space-y-6">
           <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
@@ -1683,7 +1773,7 @@ Type "DELETE" to confirm:`,
         </div>
       </Modal>
 
-      {/* 5. RESET PASSWORD MODAL (unchanged) */}
+      {/* 5. RESET PASSWORD MODAL */}
       <Modal isOpen={showResetPasswordModal} onClose={() => setShowResetPasswordModal(false)} title="Reset Password">
         <div className="space-y-6">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -1738,7 +1828,7 @@ Type "DELETE" to confirm:`,
         </div>
       </Modal>
 
-      {/* 6. SEND MESSAGE MODAL (unchanged) */}
+      {/* 6. SEND MESSAGE MODAL */}
       <Modal isOpen={showSendMessageModal} onClose={() => setShowSendMessageModal(false)} title="Send Message" wide={true}>
         <div className="space-y-6">
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
@@ -1813,7 +1903,7 @@ Type "DELETE" to confirm:`,
         </div>
       </Modal>
 
-      {/* 7. DELETE USER MODAL (unchanged) */}
+      {/* 7. DELETE USER MODAL */}
       <Modal isOpen={showDeleteUserModal} onClose={() => { setShowDeleteUserModal(false); setDeleteConfirmationText(''); }} title="Delete User Account">
         <div className="space-y-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">

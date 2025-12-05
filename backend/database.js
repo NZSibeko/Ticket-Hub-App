@@ -1,6 +1,7 @@
-// backend/database.js - FINAL WITH STATUS COLUMNS & LAST_LOGIN
+// backend/database.js - FINAL WITH METRICS TABLES & STATUS COLUMNS & LAST_LOGIN
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs').promises;
 
 const dbPath = path.resolve(__dirname, 'ticket_hub.db');
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -36,9 +37,53 @@ const dbOperations = {
 const connectDatabase = () => Promise.resolve();
 
 // ========================
-// CREATE ALL TABLES — WITH STATUS COLUMNS
+// MIGRATION FUNCTIONS
+// ========================
+
+// Add missing columns to existing tables
+const migrateMetricsTables = async () => {
+  try {
+    // Check if system_metrics table exists and add missing columns
+    const tableInfo = await dbOperations.all(
+      `PRAGMA table_info(system_metrics)`
+    );
+    
+    const existingColumns = tableInfo.map(col => col.name);
+    
+    // Add missing columns
+    const columnsToAdd = [
+      { name: 'description', type: 'TEXT' },
+      { name: 'metric_type', type: 'TEXT DEFAULT "gauge"' },
+      { name: 'unit', type: 'TEXT' }
+    ];
+    
+    for (const column of columnsToAdd) {
+      if (!existingColumns.includes(column.name)) {
+        try {
+          await dbOperations.run(
+            `ALTER TABLE system_metrics ADD COLUMN ${column.name} ${column.type}`
+          );
+          console.log(`Added column ${column.name} to system_metrics table`);
+        } catch (err) {
+          if (!err.message.includes('duplicate column name')) {
+            console.error(`Error adding column ${column.name}:`, err);
+          }
+        }
+      }
+    }
+    
+    console.log('Metrics table migration completed');
+  } catch (error) {
+    // Table might not exist yet, that's ok
+    console.log('Metrics table migration check:', error.message);
+  }
+};
+
+// ========================
+// CREATE ALL TABLES — WITH METRICS TABLES
 // ========================
 const initializeTables = async () => {
+  // Existing user tables
   await dbOperations.run(`
     CREATE TABLE IF NOT EXISTS event_managers (
       manager_id TEXT PRIMARY KEY,
@@ -53,7 +98,6 @@ const initializeTables = async () => {
     )
   `);
 
-  // ADMINS TABLE — WITH STATUS COLUMN
   await dbOperations.run(`
     CREATE TABLE IF NOT EXISTS admins (
       admin_id TEXT PRIMARY KEY,
@@ -83,7 +127,7 @@ const initializeTables = async () => {
     )
   `);
 
-  // Events table — unchanged
+  // Events table
   await dbOperations.run(`
     CREATE TABLE IF NOT EXISTS events (
       event_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,7 +182,222 @@ const initializeTables = async () => {
     )
   `);
 
+  // ========================
+  // METRICS TABLES
+  // ========================
+  
+  // System Metrics Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS system_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metric_key TEXT UNIQUE NOT NULL,
+      metric_value TEXT NOT NULL,
+      metric_type TEXT DEFAULT 'gauge',
+      unit TEXT,
+      description TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Performance Metrics Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS performance_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      endpoint TEXT NOT NULL,
+      response_time_ms INTEGER NOT NULL,
+      status_code INTEGER,
+      request_size INTEGER,
+      response_size INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Security Logs Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS security_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      severity TEXT DEFAULT 'info',
+      user_id TEXT,
+      user_email TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      details TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // System Alerts Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS system_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      alert_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      severity TEXT DEFAULT 'medium',
+      source_module TEXT,
+      affected_items TEXT,
+      recommendations TEXT,
+      acknowledged INTEGER DEFAULT 0,
+      acknowledged_by TEXT,
+      acknowledged_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // User Activity Logs Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS user_activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT,
+      user_email TEXT,
+      activity_type TEXT NOT NULL,
+      activity_details TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Blocked IPs Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS blocked_ips (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip_address TEXT UNIQUE NOT NULL,
+      reason TEXT,
+      blocked_by TEXT DEFAULT 'system',
+      attempts INTEGER DEFAULT 1,
+      is_active INTEGER DEFAULT 1,
+      expires_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Backup History Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS backup_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      backup_type TEXT DEFAULT 'automatic',
+      status TEXT NOT NULL,
+      size_mb REAL,
+      duration_seconds INTEGER,
+      details TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // System Uptime Table
+  await dbOperations.run(`
+    CREATE TABLE IF NOT EXISTS system_uptime (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_name TEXT NOT NULL,
+      status TEXT DEFAULT 'up',
+      last_check TEXT,
+      response_time_ms INTEGER,
+      error_message TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Run migrations for existing tables
+  await migrateMetricsTables();
+  
   // Initialize default metrics
+  await initializeDefaultMetrics();
+  
+  // Initialize default dashboard metrics
+  await initializeDefaultDashboardMetrics();
+
+  console.log('All tables created/verified — including metrics tables');
+};
+
+// Initialize default system metrics (without description for now)
+const initializeDefaultMetrics = async () => {
+  const defaultMetrics = [
+    { key: 'system_uptime_days', value: '0', type: 'counter', unit: 'days', description: 'System uptime in days' },
+    { key: 'database_uptime_days', value: '0', type: 'counter', unit: 'days', description: 'Database uptime in days' },
+    { key: 'database_size_mb', value: '0', type: 'gauge', unit: 'MB', description: 'Database size in megabytes' },
+    { key: 'avg_response_time', value: '0', type: 'gauge', unit: 'ms', description: 'Average API response time' },
+    { key: 'p95_response_time', value: '0', type: 'gauge', unit: 'ms', description: '95th percentile response time' },
+    { key: 'p99_response_time', value: '0', type: 'gauge', unit: 'ms', description: '99th percentile response time' },
+    { key: 'failed_login_attempts_24h', value: '0', type: 'counter', unit: 'count', description: 'Failed login attempts in last 24 hours' },
+    { key: 'password_resets_24h', value: '0', type: 'counter', unit: 'count', description: 'Password resets in last 24 hours' },
+    { key: 'active_blocked_ips', value: '0', type: 'gauge', unit: 'count', description: 'Currently blocked IP addresses' },
+    { key: 'security_alerts_24h', value: '0', type: 'counter', unit: 'count', description: 'Security alerts in last 24 hours' },
+    { key: 'total_tables', value: '0', type: 'gauge', unit: 'count', description: 'Total database tables' },
+    { key: 'total_rows', value: '0', type: 'gauge', unit: 'count', description: 'Total rows across key tables' },
+    { key: 'last_system_restart', value: new Date().toISOString(), type: 'timestamp', description: 'Last system restart time' },
+    { key: 'last_backup_status', value: 'pending', type: 'status', description: 'Last backup status' },
+    { key: 'last_backup_time', value: 'never', type: 'timestamp', description: 'Last backup time' },
+    { key: 'backup_success_rate', value: '0', type: 'gauge', unit: '%', description: 'Backup success rate' },
+  ];
+
+  for (const metric of defaultMetrics) {
+    try {
+      // First check if metric already exists
+      const existing = await dbOperations.get(
+        `SELECT metric_key FROM system_metrics WHERE metric_key = ?`,
+        [metric.key]
+      );
+      
+      if (!existing) {
+        // Insert without description first (it might not exist)
+        try {
+          await dbOperations.run(
+            `INSERT INTO system_metrics (metric_key, metric_value, metric_type, unit, description) 
+             VALUES (?, ?, ?, ?, ?)`,
+            [metric.key, metric.value, metric.type, metric.unit, metric.description]
+          );
+        } catch (descError) {
+          // If description column doesn't exist, insert without it
+          await dbOperations.run(
+            `INSERT INTO system_metrics (metric_key, metric_value) 
+             VALUES (?, ?)`,
+            [metric.key, metric.value]
+          );
+          
+          // Try to update other columns if they exist
+          try {
+            await dbOperations.run(
+              `UPDATE system_metrics SET metric_type = ?, unit = ? WHERE metric_key = ?`,
+              [metric.type, metric.unit, metric.key]
+            );
+          } catch (updateError) {
+            // Ignore update errors
+          }
+        }
+      } else {
+        // Update existing metric
+        try {
+          await dbOperations.run(
+            `UPDATE system_metrics 
+             SET metric_value = ?, metric_type = ?, unit = ?, description = ?, updated_at = datetime('now')
+             WHERE metric_key = ?`,
+            [metric.value, metric.type, metric.unit, metric.description, metric.key]
+          );
+        } catch (updateError) {
+          // Try without description
+          try {
+            await dbOperations.run(
+              `UPDATE system_metrics 
+               SET metric_value = ?, updated_at = datetime('now')
+               WHERE metric_key = ?`,
+              [metric.value, metric.key]
+            );
+          } catch (simpleError) {
+            console.error(`Error updating metric ${metric.key}:`, simpleError.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error with metric ${metric.key}:`, error.message);
+    }
+  }
+};
+
+// Initialize default dashboard metrics
+const initializeDefaultDashboardMetrics = async () => {
   const defaultMetrics = [
       { key: 'stats', value: JSON.stringify({ total: 3, active: 3, newThisWeek: 0, suspended: 0, growthRate: 0, suspendedRate: 0, newThisWeekRate: 0 }) },
       { key: 'analytics', value: JSON.stringify({ roleDistribution: { 'Admin': 33, 'Event Manager': 33, 'Customer': 33 } }) },
@@ -155,8 +414,6 @@ const initializeTables = async () => {
         await dbOperations.run(`INSERT INTO dashboard_metrics (key, value) VALUES (?, ?)`, [metric.key, metric.value]);
     }
   }
-
-  console.log('All tables created/verified — all user tables now have status and last_login columns');
 };
 
 // Migration: Add phone column if missing
@@ -237,6 +494,169 @@ const addLastLoginToUserTables = async () => {
         console.error(`Error adding last_login column to ${table}:`, err);
       }
     }
+  }
+};
+
+// ========================
+// METRICS HELPER FUNCTIONS
+// ========================
+
+const getDatabaseSize = async () => {
+  try {
+    const stats = await fs.stat(dbPath);
+    return (stats.size / (1024 * 1024)).toFixed(2); // Size in MB
+  } catch (error) {
+    console.error('Error getting database size:', error);
+    return '0';
+  }
+};
+
+const getTableCounts = async () => {
+  try {
+    const tables = await dbOperations.all(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    );
+    return tables.length;
+  } catch (error) {
+    console.error('Error getting table count:', error);
+    return 0;
+  }
+};
+
+const getTotalRowsCount = async () => {
+  try {
+    const keyTables = ['customers', 'event_managers', 'admins', 'events'];
+    let totalRows = 0;
+    
+    for (const tableName of keyTables) {
+      try {
+        const count = await dbOperations.get(
+          `SELECT COUNT(*) as count FROM ${tableName}`
+        );
+        totalRows += count?.count || 0;
+      } catch (e) {
+        // Table might not exist
+      }
+    }
+    
+    return totalRows;
+  } catch (error) {
+    console.error('Error getting total rows count:', error);
+    return 0;
+  }
+};
+
+// Update system metrics periodically
+const updateSystemMetrics = async () => {
+  try {
+    console.log('Updating system metrics...');
+    
+    // Update database size
+    const dbSize = await getDatabaseSize();
+    await dbOperations.run(
+      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+      [dbSize, 'database_size_mb']
+    );
+
+    // Update table count
+    const tableCount = await getTableCounts();
+    await dbOperations.run(
+      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+      [tableCount.toString(), 'total_tables']
+    );
+
+    // Update total rows
+    const totalRows = await getTotalRowsCount();
+    await dbOperations.run(
+      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+      [totalRows.toString(), 'total_rows']
+    );
+
+    // Update active blocked IPs count
+    const blockedIPs = await dbOperations.get(
+      `SELECT COUNT(*) as count FROM blocked_ips WHERE is_active = 1`
+    );
+    await dbOperations.run(
+      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+      [blockedIPs?.count?.toString() || '0', 'active_blocked_ips']
+    );
+
+    // Update failed login attempts in last 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const failedLogins = await dbOperations.get(
+      `SELECT COUNT(*) as count FROM security_logs 
+       WHERE event_type = 'failed_login' 
+       AND created_at >= ?`,
+      [twentyFourHoursAgo]
+    );
+    await dbOperations.run(
+      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+      [failedLogins?.count?.toString() || '0', 'failed_login_attempts_24h']
+    );
+
+    // Update password resets in last 24 hours
+    const passwordResets = await dbOperations.get(
+      `SELECT COUNT(*) as count FROM user_activity_logs 
+       WHERE activity_type = 'password_reset' 
+       AND created_at >= ?`,
+      [twentyFourHoursAgo]
+    );
+    await dbOperations.run(
+      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+      [passwordResets?.count?.toString() || '0', 'password_resets_24h']
+    );
+
+    // Update security alerts in last 24 hours
+    const securityAlerts = await dbOperations.get(
+      `SELECT COUNT(*) as count FROM system_alerts 
+       WHERE severity IN ('high', 'critical') 
+       AND created_at >= ?
+       AND acknowledged = 0`,
+      [twentyFourHoursAgo]
+    );
+    await dbOperations.run(
+      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+      [securityAlerts?.count?.toString() || '0', 'security_alerts_24h']
+    );
+
+    // Update average response time from last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const perfMetrics = await dbOperations.all(
+      `SELECT response_time_ms FROM performance_metrics 
+       WHERE created_at >= ? AND response_time_ms > 0
+       LIMIT 100`,
+      [oneHourAgo]
+    );
+    
+    if (perfMetrics.length > 0) {
+      const total = perfMetrics.reduce((sum, m) => sum + m.response_time_ms, 0);
+      const avg = Math.round(total / perfMetrics.length);
+      await dbOperations.run(
+        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+        [avg.toString(), 'avg_response_time']
+      );
+    }
+
+    // Update backup status if any backup exists
+    const latestBackup = await dbOperations.get(
+      `SELECT status, created_at FROM backup_history 
+       ORDER BY created_at DESC LIMIT 1`
+    );
+    
+    if (latestBackup) {
+      await dbOperations.run(
+        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+        [latestBackup.status, 'last_backup_status']
+      );
+      await dbOperations.run(
+        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
+        [latestBackup.created_at, 'last_backup_time']
+      );
+    }
+
+    console.log('System metrics updated successfully');
+  } catch (error) {
+    console.error('Error updating system metrics:', error);
   }
 };
 
@@ -326,6 +746,13 @@ const ensureDefaultCustomer = async (bcrypt, uuidv4) => {
     await addLastLoginToUserTables();  // Add last_login columns
     await addPhoneToAdmins();
     await updateEventsTable();
+    
+    // Start metrics updates every 5 minutes
+    setInterval(updateSystemMetrics, 5 * 60 * 1000);
+    
+    // Initial metrics update (wait 5 seconds for server to be ready)
+    setTimeout(updateSystemMetrics, 5000);
+    
   } catch (err) {
     console.error('Initialization error:', err);
   }
@@ -344,5 +771,10 @@ module.exports = {
   updateEventsTable,
   addPhoneToAdmins,
   addStatusToUserTables,
-  addLastLoginToUserTables
+  addLastLoginToUserTables,
+  updateSystemMetrics,
+  getDatabaseSize,
+  getTableCounts,
+  getTotalRowsCount,
+  migrateMetricsTables
 };
