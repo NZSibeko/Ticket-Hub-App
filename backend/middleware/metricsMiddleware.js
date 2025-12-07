@@ -1,9 +1,16 @@
 const MetricsService = require('../services/MetricsService');
 
 let metricsService = null;
+let isInitialized = false;
 
 const initializeMetrics = (service) => {
+  if (isInitialized) {
+    console.log('Metrics middleware already initialized');
+    return;
+  }
+  
   metricsService = service;
+  isInitialized = true;
   console.log('Metrics middleware initialized');
 };
 
