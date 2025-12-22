@@ -1,4 +1,4 @@
-// backend/server.js - FIXED WITH PROPER ROUTE MOUNTING
+// backend/server.js - UPDATED WITH TOKEN VALIDATION ENDPOINT
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -101,6 +101,7 @@ const app = express();
 // CORS - Allow all your frontend origins with DELETE method
 app.use(cors({
   origin: [
+    'http://localhost:8082',
     'http://localhost:8081',
     'http://localhost:3000',
     'http://localhost:3001',
@@ -108,7 +109,8 @@ app.use(cors({
     'http://localhost:19000',
     'http://localhost:8082',
     'http://localhost:5173',
-    'http://127.0.0.1:5500'
+    'http://127.0.0.1:5500',
+    'http://localhost:8080'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -448,6 +450,90 @@ app.get('/api/health', (req, res) => {
   res.json(healthData);
 });
 
+// NEW: Token validation endpoint (public)
+app.get('/api/auth/validate-token', authenticateToken, (req, res) => {
+  try {
+    const user = req.user;
+    
+    // Determine if user has admin access
+    const role = user.role || user.userType;
+    const isAdmin = ['admin', 'SUPER_ADMIN', 'event_manager'].includes(role);
+    
+    if (!isAdmin) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Admin access required' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      user: {
+        id: user.userId || user.id,
+        email: user.email,
+        role: role,
+        name: user.name || 'Admin User'
+      },
+      message: 'Token is valid'
+    });
+  } catch (error) {
+    res.status(401).json({ 
+      success: false, 
+      error: 'Invalid token' 
+    });
+  }
+});
+
+// NEW: Admin login endpoint (public)
+app.post('/api/admin/demo-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Demo admin credentials
+    const demoAdmin = {
+      email: 'admin@tickethub.co.za',
+      password: 'admin123'
+    };
+    
+    if (email !== demoAdmin.email || password !== demoAdmin.password) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+    
+    // Create token
+    const token = jwt.sign(
+      { 
+        userId: 'admin-demo-001',
+        email: demoAdmin.email,
+        role: 'admin',
+        name: 'Demo Admin'
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    
+    res.json({
+      success: true,
+      token: token,
+      user: {
+        id: 'admin-demo-001',
+        email: demoAdmin.email,
+        role: 'admin',
+        name: 'Demo Admin'
+      },
+      message: 'Demo login successful'
+    });
+  } catch (error) {
+    console.error('Demo login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Login failed' 
+    });
+  }
+});
+
 // Auth Routes (public)
 app.use('/api/auth', require('./routes/auth/customerAuth'));
 app.use('/api/event-manager/auth', require('./routes/auth/eventManagerAuth'));
@@ -710,8 +796,8 @@ const PORT = process.env.PORT || 8081;
       console.log(`   Health Check: http://localhost:${PORT}/api/health`);
       console.log(`   Events API: http://localhost:${PORT}/api/events`);
       console.log(`   Metrics Dashboard: http://localhost:${PORT}/api/metrics/dashboard-metrics`);
-      console.log(`   Metrics Diagnostics: http://localhost:${PORT}/api/metrics-diagnostics`);
-      console.log(`   Debug Endpoint: http://localhost:${PORT}/api/debug/debug-metrics`);
+      console.log(`   Demo Login: POST http://localhost:${PORT}/api/admin/demo-login`);
+      console.log(`   Token Validation: http://localhost:${PORT}/api/auth/validate-token`);
       console.log(`\n   Default Login Credentials:`);
       console.log(`   Admin → admin@tickethub.co.za / admin123`);
       console.log(`   Manager → manager@tickethub.co.za / manager123`);

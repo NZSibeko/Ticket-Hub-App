@@ -42,6 +42,21 @@ if (typeof document !== 'undefined' && !document.getElementById('tailwind-cdn'))
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fade-in 0.3s ease-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+      20%, 40%, 60%, 80% { transform: translateX(2px); }
+    }
+    .animate-shake {
+      animation: shake 0.5s ease-in-out;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -59,7 +74,7 @@ const iconMap = {
   Database: 'server',
   Download: 'download',
   Edit: 'create',
-  HardDrive: 'save', // FIXED: Changed from 'hard-drive' to 'save'
+  HardDrive: 'save',
   Lock: 'lock-closed',
   Mail: 'mail',
   Memory: 'cellular',
@@ -89,39 +104,152 @@ const AdminToolsDashboard = () => {
   const [modalContent, setModalContent] = useState(null);
   const [modalTitle, setModalTitle] = useState('');
   const [error, setError] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  useEffect(() => {
-    fetchAdminData();
-    fetchBusinessMetrics();
-    fetchSystemMetrics();
+  // NEW: Token retrieval helper
+  const getToken = () => {
+    // Check multiple possible storage keys
+    const token = localStorage.getItem('userToken') || 
+                  localStorage.getItem('token') || 
+                  localStorage.getItem('authToken') ||
+                  localStorage.getItem('adminToken') ||
+                  sessionStorage.getItem('userToken') ||
+                  sessionStorage.getItem('token');
     
-    // Try to fetch detailed metrics but handle 404 gracefully
-    fetchDetailedSystemMetrics();
+    // Also check URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('token');
     
-    const interval = setInterval(() => {
-      fetchAdminData();
-      fetchBusinessMetrics();
-      fetchSystemMetrics();
-      fetchDetailedSystemMetrics();
-    }, 30000);
-    
-    return () => clearInterval(interval);
-  }, [timeRange]);
+    return token || tokenFromUrl;
+  };
 
-  const fetchAdminData = async () => {
+  // NEW: Login check function
+  const checkLoginStatus = async () => {
+    try {
+      const token = getToken();
+      
+      if (!token) {
+        setIsLoggedIn(false);
+        return false;
+      }
+
+      // Validate token with backend
+      const validationResponse = await fetch(`${API_URL}/api/auth/validate-token`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (validationResponse.ok) {
+        const result = await validationResponse.json();
+        if (result.success) {
+          setIsLoggedIn(true);
+          return true;
+        }
+      }
+      
+      // Token invalid, clear storage
+      localStorage.removeItem('userToken');
+      localStorage.removeItem('token');
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('adminToken');
+      sessionStorage.clear();
+      
+      setIsLoggedIn(false);
+      return false;
+    } catch (error) {
+      console.error('Login check error:', error);
+      setIsLoggedIn(false);
+      return false;
+    }
+  };
+
+  // NEW: Demo login function
+  const handleDemoLogin = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`${API_URL}/api/metrics/dashboard-metrics`, {
+      const response = await fetch(`${API_URL}/api/admin/demo-login`, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'admin@tickethub.co.za',
+          password: 'admin123'
+        })
       });
-      
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(`Login failed: HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Login failed');
+      }
+      
+      // Store the token
+      localStorage.setItem('userToken', result.token);
+      localStorage.setItem('token', result.token);
+      
+      setIsLoggedIn(true);
+      
+      // Fetch dashboard data
+      await fetchDashboardData();
+      fetchBusinessMetrics();
+      fetchSystemMetrics();
+      fetchDetailedSystemMetrics();
+      
+      setError(null);
+    } catch (error) {
+      console.error('Demo login error:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // UPDATED: Fetch dashboard data with better error handling
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = getToken();
+      
+      if (!token) {
+        setIsLoggedIn(false);
+        throw new Error('No authentication token found. Please login.');
+      }
+
+      const response = await fetch(`${API_URL}/api/metrics/dashboard-metrics`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      if (response.status === 401) {
+        // Token expired or invalid
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        sessionStorage.clear();
+        setIsLoggedIn(false);
+        throw new Error('Session expired. Please login again.');
+      }
+
+      if (response.status === 403) {
+        throw new Error('Access denied. Admin privileges required.');
+      }
+
+      if (!response.ok) {
+        throw new Error(`API Error: HTTP ${response.status}`);
       }
       
       const result = await response.json();
@@ -132,7 +260,7 @@ const AdminToolsDashboard = () => {
       
       const metricsData = result.data;
       
-      const alerts = metricsData.alerts.map((alert, index) => ({
+      const alerts = metricsData.alerts?.map((alert, index) => ({
         id: alert.id || index + 1,
         type: alert.type || 'system',
         title: alert.title || 'System Alert',
@@ -145,7 +273,7 @@ const AdminToolsDashboard = () => {
         details: alert.message || 'System alert details',
         affectedItems: alert.details || [],
         recommendations: alert.recommendations || []
-      }));
+      })) || [];
       
       const securityLogs = metricsData.security?.securityLogs?.map((log, index) => ({
         id: log.id || index + 1,
@@ -284,9 +412,13 @@ const AdminToolsDashboard = () => {
       };
       
       setAdminData(transformedData);
+      setIsLoggedIn(true);
+      setError(null);
     } catch (error) {
       console.error('Error fetching admin data:', error);
       setError(error.message);
+      setIsLoggedIn(false);
+      
       setAdminData({
         systemHealth: { status: 'unknown', uptime: '0', lastIncident: 'Unknown', responseTime: '0' },
         users: { total: 0, active: 0, inactive: 0, newThisWeek: 0, suspended: 0, admins: 0, eventManagers: 0, customers: 0, growthRate: 0, userList: [] },
@@ -304,9 +436,12 @@ const AdminToolsDashboard = () => {
 
   const fetchBusinessMetrics = async () => {
     try {
+      const token = getToken();
+      if (!token) return;
+
       const response = await fetch(`${API_URL}/api/database/statistics`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -324,9 +459,12 @@ const AdminToolsDashboard = () => {
 
   const fetchSystemMetrics = async () => {
     try {
+      const token = getToken();
+      if (!token) return;
+
       const response = await fetch(`${API_URL}/api/metrics/database-comprehensive`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -342,13 +480,16 @@ const AdminToolsDashboard = () => {
     }
   };
 
-  // NEW: Fetch detailed system metrics - with better error handling
+  // Fetch detailed system metrics
   const fetchDetailedSystemMetrics = async () => {
     try {
+      const token = getToken();
+      if (!token) return;
+
       // Try to get metrics from the dashboard endpoint instead
       const response = await fetch(`${API_URL}/api/metrics/dashboard-metrics`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -423,6 +564,44 @@ const AdminToolsDashboard = () => {
     
     setSystemMetricsDetailed(simulatedMetrics);
   };
+
+  // UPDATED: useEffect with login check
+  useEffect(() => {
+    const initializeDashboard = async () => {
+      try {
+        setLoading(true);
+        
+        // First check login status
+        const loggedIn = await checkLoginStatus();
+        
+        if (loggedIn) {
+          // Fetch all data if logged in
+          await fetchDashboardData();
+          fetchBusinessMetrics();
+          fetchSystemMetrics();
+          fetchDetailedSystemMetrics();
+          
+          // Set up refresh interval
+          const interval = setInterval(() => {
+            fetchDashboardData();
+            fetchBusinessMetrics();
+            fetchSystemMetrics();
+            fetchDetailedSystemMetrics();
+          }, 30000);
+          
+          return () => clearInterval(interval);
+        } else {
+          // Not logged in, stop loading
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Initialization error:', error);
+        setLoading(false);
+      }
+    };
+    
+    initializeDashboard();
+  }, [timeRange]);
 
   // Helper functions
   const getAlertIcon = (type) => {
@@ -556,7 +735,7 @@ const AdminToolsDashboard = () => {
     }
   };
 
-  // Icon component wrapper with better error handling
+  // Icon component wrapper
   const Icon = ({ name, size = 20, color = '#000', style, className = '' }) => {
     const iconName = iconMap[name] || name;
     return (
@@ -602,7 +781,129 @@ const AdminToolsDashboard = () => {
     );
   };
 
-  // NEW: System Metrics Card Component
+  // NEW: Login Component
+  const LoginPrompt = () => {
+    const [loginLoading, setLoginLoading] = useState(false);
+    const [loginError, setLoginError] = useState(null);
+
+    const handleLogin = () => {
+      // Store the current URL to return after login
+      const returnUrl = window.location.pathname + window.location.search;
+      localStorage.setItem('returnUrl', returnUrl);
+      
+      // Redirect to login page (adjust URL as needed)
+      window.location.href = '/login';
+    };
+
+    const handleDemoLoginClick = async () => {
+      setLoginLoading(true);
+      setLoginError(null);
+      
+      try {
+        await handleDemoLogin();
+      } catch (error) {
+        setLoginError(error.message);
+      } finally {
+        setLoginLoading(false);
+      }
+    };
+
+    return (
+      <div className="h-screen-dynamic bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in">
+          <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+            <Icon name="Shield" size={40} color="#4f46e5" />
+          </div>
+          
+          <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Admin Access Required</h2>
+          <p className="text-gray-600 mb-8 text-center">Please login to access the Admin Dashboard</p>
+          
+          <div className="space-y-4">
+            <button
+              onClick={handleLogin}
+              className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+              disabled={loginLoading}
+            >
+              <Icon name="Lock" size={18} color="#fff" />
+              Go to Login Page
+            </button>
+            
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-3 bg-white text-gray-500 font-medium">Quick Access</span>
+              </div>
+            </div>
+            
+            <button
+              onClick={handleDemoLoginClick}
+              className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+              disabled={loginLoading}
+            >
+              {loginLoading ? (
+                <>
+                  <div className="animate-spin">
+                    <Icon name="RefreshCw" size={18} color="#fff" />
+                  </div>
+                  Logging in...
+                </>
+              ) : (
+                <>
+                  <Icon name="UserCheck" size={18} color="#fff" />
+                  Login as Demo Admin
+                </>
+              )}
+            </button>
+            
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="font-medium text-gray-800 mb-2 text-sm">Demo Credentials:</p>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between items-center p-2 bg-white rounded">
+                  <span className="text-gray-600">Email:</span>
+                  <span className="font-mono text-gray-800">admin@tickethub.co.za</span>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-white rounded">
+                  <span className="text-gray-600">Password:</span>
+                  <span className="font-mono text-gray-800">admin123</span>
+                </div>
+              </div>
+            </div>
+            
+            {loginError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg animate-shake">
+                <p className="text-red-600 text-sm flex items-center gap-2">
+                  <Icon name="AlertTriangle" size={14} color="#dc2626" />
+                  {loginError}
+                </p>
+              </div>
+            )}
+          </div>
+          
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <p className="text-sm text-gray-500 mb-3 font-medium">Troubleshooting:</p>
+            <ul className="text-xs text-gray-500 space-y-2">
+              <li className="flex items-start gap-2">
+                <Icon name="Database" size={12} color="#6b7280" className="mt-0.5" />
+                <span>Ensure backend is running at <code className="bg-gray-100 px-1 rounded">{API_URL}</code></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Icon name="Settings" size={12} color="#6b7280" className="mt-0.5" />
+                <span>Check browser console (F12) for detailed errors</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Icon name="RefreshCw" size={12} color="#6b7280" className="mt-0.5" />
+                <span>Clear browser cache if issues persist</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // System Metrics Card Component
   const SystemMetricsCard = ({ metric }) => {
     const metricValue = getSystemMetricValue(metric.key);
     const metricUnit = getMetricUnit(metric.key);
@@ -834,7 +1135,12 @@ const AdminToolsDashboard = () => {
                     <button 
                       onClick={async () => {
                         try {
-                          const response = await fetch(`${API_URL}/api/metrics/blocked-ips`);
+                          const token = getToken();
+                          const response = await fetch(`${API_URL}/api/metrics/blocked-ips`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            }
+                          });
                           if (response.ok) {
                             const data = await response.json();
                             if (data.success) {
@@ -918,7 +1224,7 @@ const AdminToolsDashboard = () => {
             <button 
               onClick={() => {
                 setModalOpen(false);
-                fetchAdminData();
+                fetchDashboardData();
               }}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
             >
@@ -1482,7 +1788,7 @@ const AdminToolsDashboard = () => {
     );
   };
 
-  // Detail View Components (Original ones kept for compatibility)
+  // Detail View Components
   const UserManagementView = () => {
     const filteredUsers = adminData?.users?.userList?.filter(user => {
       const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -1665,14 +1971,15 @@ const AdminToolsDashboard = () => {
                   <button 
                     onClick={async () => {
                       try {
+                        const token = getToken();
                         await fetch(`${API_URL}/api/metrics/blocked-ip/${item.ip}`, {
                           method: 'DELETE',
                           headers: {
-                            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+                            'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json'
                           }
                         });
-                        fetchAdminData(); // Refresh data
+                        fetchDashboardData(); // Refresh data
                       } catch (err) {
                         console.error('Error unblocking IP:', err);
                       }
@@ -1866,6 +2173,43 @@ const AdminToolsDashboard = () => {
     </div>
   );
 
+  // NEW: Logout function
+  const handleLogout = () => {
+    localStorage.removeItem('userToken');
+    localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('adminToken');
+    sessionStorage.clear();
+    setIsLoggedIn(false);
+    setAdminData(null);
+    setError('Logged out successfully. Please login again.');
+  };
+
+  // Loading state
+  if (loading && !isLoggedIn) {
+    return (
+      <div className="h-screen-dynamic bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin mx-auto mb-4">
+            <Icon name="RefreshCw" size={32} color="#6366f1" />
+          </div>
+          <p className="text-gray-600">Initializing dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login prompt if not logged in
+  if (!isLoggedIn) {
+    return <LoginPrompt />;
+  }
+
+  // Error state - redirect to login if session expired
+  if (error && (error.includes('Please login') || error.includes('Session expired'))) {
+    return <LoginPrompt />;
+  }
+
+  // Main dashboard loading
   if (loading) {
     return (
       <div className="h-screen-dynamic bg-gray-50 flex items-center justify-center">
@@ -1875,6 +2219,36 @@ const AdminToolsDashboard = () => {
           </div>
           <p className="text-gray-600">Loading admin dashboard...</p>
           {error && <p className="text-red-500 text-sm mt-2">Error: {error}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !adminData) {
+    return (
+      <div className="h-screen-dynamic bg-gray-50 flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <Icon name="AlertTriangle" size={48} color="#ef4444" className="mx-auto mb-4" />
+          <p className="text-lg font-bold text-red-600 mb-2">Unable to Load Dashboard</p>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <div className="space-y-3">
+            <button 
+              onClick={fetchDashboardData}
+              className="w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Retry Connection
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="w-full px-6 py-3 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Logout and Try Again
+            </button>
+            <p className="text-xs text-gray-500">
+              Check if backend is running on {API_URL}<br />
+              Make sure you're logged in as an administrator
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -1952,7 +2326,7 @@ const AdminToolsDashboard = () => {
                   {currentView === 'logs' && 'System Logs'}
                   {currentView === 'settings' && 'Platform Settings'}
                   {currentView === 'metrics' && 'Business Metrics'}
-                  {currentView === 'system-metrics' && 'System Metrics'} {/* NEW */}
+                  {currentView === 'system-metrics' && 'System Metrics'}
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">
                   {currentView === 'dashboard' && 'System administration and monitoring'}
@@ -1963,14 +2337,14 @@ const AdminToolsDashboard = () => {
                   {currentView === 'logs' && 'System activity logs'}
                   {currentView === 'settings' && 'Platform configuration'}
                   {currentView === 'metrics' && 'Business intelligence and analytics'}
-                  {currentView === 'system-metrics' && 'System performance monitoring'} {/* NEW */}
+                  {currentView === 'system-metrics' && 'System performance monitoring'}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  fetchAdminData();
+                  fetchDashboardData();
                   fetchBusinessMetrics();
                   fetchSystemMetrics();
                   fetchDetailedSystemMetrics();
@@ -1980,12 +2354,24 @@ const AdminToolsDashboard = () => {
               >
                 <Icon name="RefreshCw" size={20} color="#4b5563" />
               </button>
+              <button
+                onClick={handleLogout}
+                className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                title="Logout"
+              >
+                <Icon name="Unlock" size={20} color="#ef4444" />
+              </button>
             </div>
           </div>
-          {error && (
+          {error && !error.includes('Logged out') && !error.includes('Session expired') && (
             <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
               <p className="text-red-600 text-sm">API Error: {error}</p>
               <p className="text-red-500 text-xs">Check if backend is running on {API_URL}</p>
+            </div>
+          )}
+          {error && error.includes('Logged out') && (
+            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+              <p className="text-green-600 text-sm">{error}</p>
             </div>
           )}
         </div>
@@ -2070,16 +2456,17 @@ const AdminToolsDashboard = () => {
                                         <button 
                                           onClick={async () => {
                                             try {
+                                              const token = getToken();
                                               const response = await fetch(`${API_URL}/api/metrics/blocked-ip/${ip.ip}`, {
                                                 method: 'DELETE',
                                                 headers: {
-                                                  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+                                                  'Authorization': `Bearer ${token}`,
                                                   'Content-Type': 'application/json'
                                                 }
                                               });
                                               if (response.ok) {
                                                 alert(`IP ${ip.ip} unblocked`);
-                                                fetchAdminData();
+                                                fetchDashboardData();
                                                 setModalOpen(false);
                                               }
                                             } catch (err) {
@@ -2802,7 +3189,7 @@ const AdminToolsDashboard = () => {
             )}
 
             {currentView === 'metrics' && <BusinessMetricsView />}
-            {currentView === 'system-metrics' && <SystemMetricsView />} {/* NEW */}
+            {currentView === 'system-metrics' && <SystemMetricsView />}
             {currentView === 'users' && <UserManagementView />}
             {currentView === 'security' && <SecurityCenterView />}
             {currentView === 'approvals' && <EventApprovalsView />}
