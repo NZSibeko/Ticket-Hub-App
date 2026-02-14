@@ -1,4 +1,4 @@
-const { dbOperations } = require('../database');
+const { dbOperations, ensureDatabaseReady, safeDbOperation, safeUpdateMetric, safeGetMetric } = require('../database');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -8,6 +8,7 @@ class MetricsService {
     this.metricsUpdateInterval = null;
     this.isRunning = false;
     this.initialized = false;
+    this.dbReady = false;
     console.log('MetricsService constructor called');
   }
 
@@ -26,6 +27,9 @@ class MetricsService {
     this.isRunning = true;
     
     try {
+      // Ensure database is ready before proceeding
+      await this.ensureDatabaseReady();
+      
       // Try to initialize with a timeout
       await this.safeInitialize();
       
@@ -43,6 +47,24 @@ class MetricsService {
     }
   }
 
+  async ensureDatabaseReady() {
+    if (this.dbReady) {
+      return true;
+    }
+    
+    console.log('Ensuring database is ready for metrics...');
+    try {
+      // Use the database's ensureDatabaseReady function
+      await ensureDatabaseReady();
+      this.dbReady = true;
+      console.log('✅ Database confirmed ready for metrics');
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to ensure database is ready:', error.message);
+      throw error;
+    }
+  }
+
   async safeInitialize() {
     return new Promise(async (resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -50,14 +72,16 @@ class MetricsService {
       }, 8000);
       
       try {
-        // Quick initialization - skip heavy calculations initially
+        // Ensure database is ready
+        await this.ensureDatabaseReady();
+        
         console.log('Performing quick initialization...');
         
         // Just set basic metrics without heavy DB queries
         const uptimeMs = new Date() - this.startTime;
         const uptimeDays = (uptimeMs / (1000 * 60 * 60 * 24)).toFixed(2);
         
-        // Set basic metrics
+        // Set basic metrics using safe operations
         await this.updateMetricSafe('system_uptime_days', uptimeDays);
         await this.updateMetricSafe('last_system_restart', this.startTime.toISOString());
         
@@ -117,6 +141,9 @@ class MetricsService {
 
   async calculateInitialMetricsSafe() {
     try {
+      // Ensure database is ready
+      await this.ensureDatabaseReady();
+      
       // Calculate initial database size
       const dbPath = path.resolve(__dirname, '..', 'ticket_hub.db');
       if (await this.fileExists(dbPath)) {
@@ -138,26 +165,42 @@ class MetricsService {
     try {
       if (!this.isRunning) return;
       
-      // Run each metric update separately with error handling
-      const updates = [
-        this.updateUptimeMetrics(),
-        this.updateDatabaseMetrics(),
-        this.updateResponseTimeMetrics(),
-        this.updateSecurityMetrics(),
-        this.updateBackupMetrics(),
-        this.updateBusinessMetrics()
+      // Ensure database is ready before starting
+      await this.ensureDatabaseReady();
+      
+      console.log('Starting comprehensive metrics update...');
+      
+      // Define all update functions with their names
+      const updateFunctions = [
+        { name: 'updateUptimeMetrics', func: this.updateUptimeMetrics.bind(this) },
+        { name: 'updateDatabaseMetrics', func: this.updateDatabaseMetrics.bind(this) },
+        { name: 'updateResponseTimeMetrics', func: this.updateResponseTimeMetrics.bind(this) },
+        { name: 'updateSecurityMetrics', func: this.updateSecurityMetrics.bind(this) },
+        { name: 'updateBackupMetrics', func: this.updateBackupMetrics.bind(this) },
+        { name: 'updateBusinessMetrics', func: this.updateBusinessMetrics.bind(this) },
+        
+        // NEW METRICS
+        { name: 'updateDatabaseManagementMetrics', func: this.updateDatabaseManagementMetrics.bind(this) },
+        { name: 'updateSystemLogsMetrics', func: this.updateSystemLogsMetrics.bind(this) },
+        { name: 'updateSystemResourceMetrics', func: this.updateSystemResourceMetrics.bind(this) },
+        { name: 'updateNotificationMetrics', func: this.updateNotificationMetrics.bind(this) },
+        { name: 'updatePerformanceMetrics', func: this.updatePerformanceMetrics.bind(this) },
+        { name: 'updateBusinessMetricsEnhanced', func: this.updateBusinessMetricsEnhanced.bind(this) }
       ];
       
       // Run all updates, don't fail if some fail
-      for (const update of updates) {
+      for (const { name, func } of updateFunctions) {
         try {
-          await update;
+          await func();
+          console.log(`✓ Completed: ${name}`);
         } catch (error) {
-          console.log('Metric update failed (continuing):', error.message);
+          console.log(`✗ Failed ${name}:`, error.message);
         }
       }
       
       await this.checkAndGenerateAlerts();
+      
+      console.log('✅ All metrics updated successfully');
       
     } catch (error) {
       console.error('Error in safe metrics update:', error.message);
@@ -171,11 +214,8 @@ class MetricsService {
 
   async updateMetricSafe(key, value) {
     try {
-      await dbOperations.run(
-        `INSERT OR REPLACE INTO system_metrics (metric_key, metric_value, updated_at) 
-         VALUES (?, ?, datetime('now'))`,
-        [key, value]
-      );
+      // Use the safe update function from database module
+      await safeUpdateMetric(key, value);
     } catch (error) {
       console.error(`Safe update metric ${key} failed:`, error.message);
     }
@@ -184,6 +224,8 @@ class MetricsService {
   // Keep all your existing methods but rename the updateAllMetrics to updateAllMetricsSafe in the interval
   async updateUptimeMetrics() {
     try {
+      await this.ensureDatabaseReady();
+      
       const uptimeMs = new Date() - this.startTime;
       const uptimeDays = (uptimeMs / (1000 * 60 * 60 * 24)).toFixed(2);
       
@@ -197,6 +239,8 @@ class MetricsService {
 
   async updateDatabaseMetrics() {
     try {
+      await this.ensureDatabaseReady();
+      
       // Get database size
       const dbPath = path.resolve(__dirname, '..', 'ticket_hub.db');
       if (await this.fileExists(dbPath)) {
@@ -215,16 +259,18 @@ class MetricsService {
 
   async updateResponseTimeMetrics() {
     try {
+      await this.ensureDatabaseReady();
+      
       // Calculate average response time from performance metrics (last 1 hour)
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       
-      const perfMetrics = await dbOperations.all(`
+      const perfMetrics = await this.safeQueryWithFallback('all', `
         SELECT response_time_ms 
         FROM performance_metrics 
         WHERE created_at >= ? AND response_time_ms > 0
         ORDER BY created_at DESC
         LIMIT 100
-      `, [oneHourAgo]);
+      `, [oneHourAgo], []);
       
       if (perfMetrics && perfMetrics.length > 0) {
         const total = perfMetrics.reduce((sum, m) => sum + (m.response_time_ms || 0), 0);
@@ -246,16 +292,19 @@ class MetricsService {
 
   async updateSecurityMetrics() {
     try {
+      await this.ensureDatabaseReady();
+      
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       
       // Failed login attempts
       let failedLogins = 0;
       try {
-        const result = await dbOperations.get(
+        const result = await this.safeQueryWithFallback('get',
           `SELECT COUNT(*) as count FROM security_logs 
            WHERE event_type = 'failed_login' 
            AND created_at >= ?`,
-          [twentyFourHoursAgo]
+          [twentyFourHoursAgo],
+          { count: 0 }
         );
         failedLogins = result?.count || 0;
       } catch (e) {
@@ -265,11 +314,12 @@ class MetricsService {
       // Password resets
       let passwordResets = 0;
       try {
-        const result = await dbOperations.get(
+        const result = await this.safeQueryWithFallback('get',
           `SELECT COUNT(*) as count FROM user_activity_logs 
            WHERE activity_type = 'password_reset' 
            AND created_at >= ?`,
-          [twentyFourHoursAgo]
+          [twentyFourHoursAgo],
+          { count: 0 }
         );
         passwordResets = result?.count || 0;
       } catch (e) {
@@ -279,10 +329,12 @@ class MetricsService {
       // Active blocked IPs
       let blockedIPs = 0;
       try {
-        const result = await dbOperations.get(
+        const result = await this.safeQueryWithFallback('get',
           `SELECT COUNT(*) as count FROM blocked_ips 
            WHERE is_active = 1 
-           AND (expires_at IS NULL OR expires_at > datetime('now'))`
+           AND (expires_at IS NULL OR expires_at > datetime('now'))`,
+          [],
+          { count: 0 }
         );
         blockedIPs = result?.count || 0;
       } catch (e) {
@@ -299,9 +351,13 @@ class MetricsService {
 
   async updateBackupMetrics() {
     try {
-      const latestBackup = await dbOperations.get(
+      await this.ensureDatabaseReady();
+      
+      const latestBackup = await this.safeQueryWithFallback('get',
         `SELECT status, created_at FROM backup_history 
-         ORDER BY created_at DESC LIMIT 1`
+         ORDER BY created_at DESC LIMIT 1`,
+        [],
+        null
       );
       
       if (latestBackup) {
@@ -319,12 +375,14 @@ class MetricsService {
 
   async updateBusinessMetrics() {
     try {
+      await this.ensureDatabaseReady();
+      
       const today = new Date().toISOString().split('T')[0];
       
       // Get new users today
       let newUsers = 0;
       try {
-        const result = await dbOperations.get(`
+        const result = await this.safeQueryWithFallback('get', `
           SELECT COUNT(*) as count FROM (
             SELECT customer_id FROM customers WHERE DATE(created_at) = DATE('now')
             UNION ALL
@@ -332,7 +390,7 @@ class MetricsService {
             UNION ALL
             SELECT admin_id FROM admins WHERE DATE(created_at) = DATE('now')
           )
-        `);
+        `, [], { count: 0 });
         newUsers = result?.count || 0;
       } catch (e) {
         // Tables might not exist
@@ -341,10 +399,10 @@ class MetricsService {
       // Get events created today
       let eventsCreated = 0;
       try {
-        const result = await dbOperations.get(`
+        const result = await this.safeQueryWithFallback('get', `
           SELECT COUNT(*) as count FROM events 
           WHERE DATE(created_at) = DATE('now')
-        `);
+        `, [], { count: 0 });
         eventsCreated = result?.count || 0;
       } catch (e) {
         // Events table might not exist
@@ -355,15 +413,15 @@ class MetricsService {
       let activeEvents = 0;
       let pendingEvents = 0;
       try {
-        totalEvents = (await dbOperations.get(`SELECT COUNT(*) as count FROM events`))?.count || 0;
-        activeEvents = (await dbOperations.get(`
+        totalEvents = (await this.safeQueryWithFallback('get', `SELECT COUNT(*) as count FROM events`, [], { count: 0 }))?.count || 0;
+        activeEvents = (await this.safeQueryWithFallback('get', `
           SELECT COUNT(*) as count FROM events 
           WHERE status = 'ACTIVE' OR status = 'active'
-        `))?.count || 0;
-        pendingEvents = (await dbOperations.get(`
+        `, [], { count: 0 }))?.count || 0;
+        pendingEvents = (await this.safeQueryWithFallback('get', `
           SELECT COUNT(*) as count FROM events 
           WHERE status = 'PENDING' OR status = 'pending'
-        `))?.count || 0;
+        `, [], { count: 0 }))?.count || 0;
       } catch (e) {
         // Events table might not exist
       }
@@ -392,6 +450,8 @@ class MetricsService {
 
   async checkAndGenerateAlerts() {
     try {
+      await this.ensureDatabaseReady();
+      
       // Simple alert check - can be expanded later
       const failedLoginsMetric = await this.getMetricValue('failed_login_attempts_24h');
       const failedLogins = parseInt(failedLoginsMetric) || 0;
@@ -443,14 +503,17 @@ class MetricsService {
 
   async createAlert(alertData) {
     try {
-      const existingAlert = await dbOperations.get(
+      await this.ensureDatabaseReady();
+      
+      const existingAlert = await this.safeQueryWithFallback('get',
         `SELECT id FROM system_alerts 
          WHERE alert_type = ? AND title = ? AND acknowledged = 0`,
-        [alertData.alert_type, alertData.title]
+        [alertData.alert_type, alertData.title],
+        null
       );
       
       if (!existingAlert) {
-        await dbOperations.run(
+        await this.safeQueryWithFallback('run',
           `INSERT INTO system_alerts 
            (alert_type, title, message, severity, source_module, affected_items, recommendations) 
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -462,7 +525,8 @@ class MetricsService {
             alertData.source_module,
             alertData.affected_items,
             alertData.recommendations
-          ]
+          ],
+          null
         );
       }
     } catch (error) {
@@ -472,9 +536,12 @@ class MetricsService {
 
   async getMetricValue(key) {
     try {
-      const metric = await dbOperations.get(
+      await this.ensureDatabaseReady();
+      
+      const metric = await this.safeQueryWithFallback('get',
         `SELECT metric_value FROM system_metrics WHERE metric_key = ?`,
-        [key]
+        [key],
+        null
       );
       return metric ? metric.metric_value : '0';
     } catch (error) {
@@ -485,7 +552,9 @@ class MetricsService {
 
   async logSecurityEvent(eventData) {
     try {
-      await dbOperations.run(
+      await this.ensureDatabaseReady();
+      
+      await this.safeQueryWithFallback('run',
         `INSERT INTO security_logs 
          (event_type, severity, user_id, user_email, ip_address, user_agent, details) 
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -497,7 +566,8 @@ class MetricsService {
           eventData.ip_address,
           eventData.user_agent,
           eventData.details
-        ]
+        ],
+        null
       );
     } catch (error) {
       console.error('Error logging security event:', error.message);
@@ -506,7 +576,9 @@ class MetricsService {
 
   async logUserActivity(activityData) {
     try {
-      await dbOperations.run(
+      await this.ensureDatabaseReady();
+      
+      await this.safeQueryWithFallback('run',
         `INSERT INTO user_activity_logs 
          (user_id, user_email, activity_type, activity_details, ip_address, user_agent) 
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -517,7 +589,8 @@ class MetricsService {
           activityData.activity_details,
           activityData.ip_address,
           activityData.user_agent
-        ]
+        ],
+        null
       );
     } catch (error) {
       console.error('Error logging user activity:', error.message);
@@ -526,23 +599,28 @@ class MetricsService {
 
   async blockIP(ip, reason, blockedBy = 'system') {
     try {
-      const existing = await dbOperations.get(
+      await this.ensureDatabaseReady();
+      
+      const existing = await this.safeQueryWithFallback('get',
         `SELECT id, attempts FROM blocked_ips WHERE ip_address = ? AND is_active = 1`,
-        [ip]
+        [ip],
+        null
       );
       
       if (existing) {
-        await dbOperations.run(
+        await this.safeQueryWithFallback('run',
           `UPDATE blocked_ips SET attempts = attempts + 1 WHERE id = ?`,
-          [existing.id]
+          [existing.id],
+          null
         );
       } else {
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         
-        await dbOperations.run(
+        await this.safeQueryWithFallback('run',
           `INSERT INTO blocked_ips (ip_address, reason, blocked_by, expires_at) 
            VALUES (?, ?, ?, ?)`,
-          [ip, reason, blockedBy, expiresAt]
+          [ip, reason, blockedBy, expiresAt],
+          null
         );
       }
     } catch (error) {
@@ -552,11 +630,14 @@ class MetricsService {
 
   async logPerformance(endpoint, responseTime, statusCode, requestSize, responseSize) {
     try {
-      await dbOperations.run(
+      await this.ensureDatabaseReady();
+      
+      await this.safeQueryWithFallback('run',
         `INSERT INTO performance_metrics 
          (endpoint, response_time_ms, status_code, request_size, response_size) 
          VALUES (?, ?, ?, ?, ?)`,
-        [endpoint, responseTime, statusCode, requestSize, responseSize]
+        [endpoint, responseTime, statusCode, requestSize, responseSize],
+        null
       );
     } catch (error) {
       console.error('Error logging performance:', error.message);
@@ -565,24 +646,31 @@ class MetricsService {
 
   async getDashboardData() {
     try {
-      const metrics = await dbOperations.all(`SELECT * FROM system_metrics`) || [];
-      const alerts = await dbOperations.all(
-        `SELECT * FROM system_alerts WHERE acknowledged = 0 ORDER BY created_at DESC LIMIT 10`
-      ) || [];
-      const securityLogs = await dbOperations.all(
-        `SELECT * FROM security_logs ORDER BY created_at DESC LIMIT 20`
-      ) || [];
-      const blockedIPs = await dbOperations.all(
+      await this.ensureDatabaseReady();
+      
+      const metrics = await this.safeQueryWithFallback('all', `SELECT * FROM system_metrics`, [], []);
+      const alerts = await this.safeQueryWithFallback('all',
+        `SELECT * FROM system_alerts WHERE acknowledged = 0 ORDER BY created_at DESC LIMIT 10`,
+        [], []
+      );
+      const securityLogs = await this.safeQueryWithFallback('all',
+        `SELECT * FROM security_logs ORDER BY created_at DESC LIMIT 20`,
+        [], []
+      );
+      const blockedIPs = await this.safeQueryWithFallback('all',
         `SELECT * FROM blocked_ips WHERE is_active = 1 
          AND (expires_at IS NULL OR expires_at > datetime('now')) 
-         ORDER BY created_at DESC`
-      ) || [];
-      const backupHistory = await dbOperations.all(
-        `SELECT * FROM backup_history ORDER BY created_at DESC LIMIT 10`
-      ) || [];
-      const recentActivity = await dbOperations.all(
-        `SELECT * FROM user_activity_logs ORDER BY created_at DESC LIMIT 20`
-      ) || [];
+         ORDER BY created_at DESC`,
+        [], []
+      );
+      const backupHistory = await this.safeQueryWithFallback('all',
+        `SELECT * FROM backup_history ORDER BY created_at DESC LIMIT 10`,
+        [], []
+      );
+      const recentActivity = await this.safeQueryWithFallback('all',
+        `SELECT * FROM user_activity_logs ORDER BY created_at DESC LIMIT 20`,
+        [], []
+      );
       
       const formattedMetrics = {};
       metrics.forEach(metric => {
@@ -616,22 +704,49 @@ class MetricsService {
     }
   }
 
+  // NEW: Safe query with fallback to handle missing tables
+  async safeQueryWithFallback(operation, sql, params, fallbackResult) {
+    try {
+      const result = await safeDbOperation(operation, sql, params);
+      return result !== null ? result : fallbackResult;
+    } catch (error) {
+      // Check if it's a "no such table" error
+      if (error.message && error.message.includes('no such table')) {
+        console.log(`Table doesn't exist for query, using fallback: ${error.message.split(':')[0]}`);
+        return fallbackResult;
+      }
+      // Check if it's a "no such column" error
+      if (error.message && error.message.includes('no such column')) {
+        console.log(`Column doesn't exist for query, using fallback: ${error.message.split(':')[0]}`);
+        return fallbackResult;
+      }
+      // Re-throw other errors
+      throw error;
+    }
+  }
+
 // Database Management Metrics
 async updateDatabaseManagementMetrics() {
   try {
+    await this.ensureDatabaseReady();
+    
     console.log('Updating database management metrics...');
     
     // Get total table count
-    const tables = await dbOperations.all(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    const tables = await this.safeQueryWithFallback('all',
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+      [],
+      []
     );
     
     // Get total row count across all tables
     let totalRows = 0;
     for (const table of tables) {
       try {
-        const result = await dbOperations.get(
-          `SELECT COUNT(*) as count FROM ${table.name}`
+        const result = await this.safeQueryWithFallback('get',
+          `SELECT COUNT(*) as count FROM ${table.name}`,
+          [],
+          { count: 0 }
         );
         totalRows += result?.count || 0;
       } catch (error) {
@@ -652,23 +767,31 @@ async updateDatabaseManagementMetrics() {
     }
     
     // Get index count
-    const indexes = await dbOperations.all(
-      "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+    const indexes = await this.safeQueryWithFallback('all',
+      "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
+      [],
+      []
     );
     
-    // Get query performance metrics
-    const slowQueries = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM database_query_metrics 
-      WHERE execution_time_ms > 100 
-      AND created_at >= datetime('now', '-1 hour')
-    `);
+    // Get query performance metrics - safely handle missing table
+    let slowQueries = 0;
+    try {
+      const result = await this.safeQueryWithFallback('get', `
+        SELECT COUNT(*) as count FROM database_query_metrics 
+        WHERE execution_time_ms > 100 
+        AND created_at >= datetime('now', '-1 hour')
+      `, [], { count: 0 });
+      slowQueries = result?.count || 0;
+    } catch (e) {
+      // Table might not exist - already handled by safeQueryWithFallback
+    }
     
     // Update metrics
     await this.updateMetricSafe('database_total_tables', tables.length.toString());
     await this.updateMetricSafe('database_total_rows', totalRows.toString());
     await this.updateMetricSafe('database_size_mb', dbSizeMB);
     await this.updateMetricSafe('database_index_count', indexes.length.toString());
-    await this.updateMetricSafe('database_slow_queries_last_hour', (slowQueries?.count || 0).toString());
+    await this.updateMetricSafe('database_slow_queries_last_hour', slowQueries.toString());
     await this.updateMetricSafe('database_last_optimization', new Date().toISOString());
     
     console.log('Database management metrics updated');
@@ -681,66 +804,118 @@ async updateDatabaseManagementMetrics() {
 // System Logs Collection
 async updateSystemLogsMetrics() {
   try {
+    await this.ensureDatabaseReady();
+    
     console.log('Updating system logs metrics...');
     
-    // Get log counts by level
-    const logCounts = await dbOperations.get(`
-      SELECT 
-        SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as error_count,
-        SUM(CASE WHEN level = 'WARNING' THEN 1 ELSE 0 END) as warning_count,
-        SUM(CASE WHEN level = 'INFO' THEN 1 ELSE 0 END) as info_count,
-        COUNT(*) as total_count
-      FROM (
-        SELECT 'ERROR' as level, created_at FROM security_logs WHERE severity = 'high'
-        UNION ALL
-        SELECT 'WARNING' as level, created_at FROM system_alerts WHERE acknowledged = 0
-        UNION ALL
-        SELECT 'INFO' as level, created_at FROM user_activity_logs
-      ) logs
-      WHERE created_at >= datetime('now', '-24 hours')
-    `);
+    // Get log counts by level - safely handle missing tables
+    let logCounts = { error_count: 0, warning_count: 0, info_count: 0, total_count: 0 };
+    try {
+      const result = await this.safeQueryWithFallback('get', `
+        SELECT 
+          SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as error_count,
+          SUM(CASE WHEN level = 'WARNING' THEN 1 ELSE 0 END) as warning_count,
+          SUM(CASE WHEN level = 'INFO' THEN 1 ELSE 0 END) as info_count,
+          COUNT(*) as total_count
+        FROM (
+          SELECT 'ERROR' as level, created_at FROM security_logs WHERE severity = 'high'
+          UNION ALL
+          SELECT 'WARNING' as level, created_at FROM system_alerts WHERE acknowledged = 0
+          UNION ALL
+          SELECT 'INFO' as level, created_at FROM user_activity_logs
+        ) logs
+        WHERE created_at >= datetime('now', '-24 hours')
+      `, [], logCounts);
+      logCounts = result || logCounts;
+    } catch (e) {
+      // Tables might not exist
+    }
     
-    // Get module-wise error distribution
-    const moduleErrors = await dbOperations.all(`
-      SELECT 
-        'security' as module, COUNT(*) as count FROM security_logs 
+    // Get module-wise error distribution - safely handle missing tables
+    const moduleErrors = [];
+    try {
+      // First check if database_query_metrics table exists
+      const tableExists = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='database_query_metrics'",
+        [],
+        null
+      );
+      
+      let query = `
+        SELECT 'security' as module, COUNT(*) as count FROM security_logs 
         WHERE severity IN ('high', 'critical') AND created_at >= datetime('now', '-24 hours')
         GROUP BY module
-      UNION ALL
-      SELECT 
-        'authentication' as module, COUNT(*) as count FROM user_activity_logs 
+        UNION ALL
+        SELECT 'authentication' as module, COUNT(*) as count FROM user_activity_logs 
         WHERE activity_type IN ('failed_login', 'password_reset_failed') 
         AND created_at >= datetime('now', '-24 hours')
         GROUP BY module
-      UNION ALL
-      SELECT 
-        'database' as module, COUNT(*) as count FROM database_query_metrics 
-        WHERE error_message IS NOT NULL AND created_at >= datetime('now', '-24 hours')
-        GROUP BY module
-    `);
+      `;
+      
+      if (tableExists) {
+        query += `
+          UNION ALL
+          SELECT 'database' as module, COUNT(*) as count FROM database_query_metrics 
+          WHERE error_message IS NOT NULL AND created_at >= datetime('now', '-24 hours')
+          GROUP BY module
+        `;
+      }
+      
+      const results = await this.safeQueryWithFallback('all', query, [], []);
+      moduleErrors.push(...results);
+    } catch (e) {
+      // Tables might not exist
+    }
     
     // Update metrics
-    await this.updateMetricSafe('system_logs_errors_24h', (logCounts?.error_count || 0).toString());
-    await this.updateMetricSafe('system_logs_warnings_24h', (logCounts?.warning_count || 0).toString());
-    await this.updateMetricSafe('system_logs_total_24h', (logCounts?.total_count || 0).toString());
+    await this.updateMetricSafe('system_logs_errors_24h', (logCounts.error_count || 0).toString());
+    await this.updateMetricSafe('system_logs_warnings_24h', (logCounts.warning_count || 0).toString());
+    await this.updateMetricSafe('system_logs_total_24h', (logCounts.total_count || 0).toString());
     
     // Update module-specific metrics
     for (const module of moduleErrors) {
       await this.updateMetricSafe(`system_logs_${module.module}_24h`, module.count.toString());
     }
     
-    // Log retention information
-    const totalLogs = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM (
-        SELECT id FROM security_logs
-        UNION ALL
-        SELECT id FROM user_activity_logs
-        UNION ALL
-        SELECT id FROM performance_metrics
-      )
-    `);
+    // Log retention information - safely handle missing tables
+    let totalLogs = 0;
+    try {
+      // Check which tables exist
+      const securityLogsExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='security_logs'",
+        [],
+        null
+      );
+      const activityLogsExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_activity_logs'",
+        [],
+        null
+      );
+      const perfMetricsExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='performance_metrics'",
+        [],
+        null
+      );
+      
+      let queryParts = [];
+      if (securityLogsExist) queryParts.push("SELECT id FROM security_logs");
+      if (activityLogsExist) queryParts.push("SELECT id FROM user_activity_logs");
+      if (perfMetricsExist) queryParts.push("SELECT id FROM performance_metrics");
+      
+      if (queryParts.length > 0) {
+        const query = queryParts.join('\nUNION ALL\n');
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT COUNT(*) as count FROM (
+            ${query}
+          )
+        `, [], { count: 0 });
+        totalLogs = result?.count || 0;
+      }
+    } catch (e) {
+      // Tables might not exist
+    }
     
-    await this.updateMetricSafe('system_logs_total_stored', (totalLogs?.count || 0).toString());
+    await this.updateMetricSafe('system_logs_total_stored', totalLogs.toString());
     
     console.log('System logs metrics updated');
     
@@ -752,10 +927,11 @@ async updateSystemLogsMetrics() {
 // System Resource Metrics (CPU, Memory, Disk)
 async updateSystemResourceMetrics() {
   try {
+    await this.ensureDatabaseReady();
+    
     console.log('Updating system resource metrics...');
     
     const os = require('os');
-    const fs = require('fs').promises;
     
     // CPU Usage (load average)
     const loadAvg = os.loadavg();
@@ -784,34 +960,42 @@ async updateSystemResourceMetrics() {
     // Process Count
     const processCount = os.cpus().length;
     
-    // Network Stats (simplified)
-    const networkInterfaces = os.networkInterfaces();
-    let networkRx = 0;
-    let networkTx = 0;
-    
-    // Save to database
-    await dbOperations.run(`
-      INSERT INTO system_resource_metrics 
-      (cpu_usage_percent, memory_usage_percent, memory_used_mb, memory_total_mb, 
-       disk_usage_percent, disk_used_gb, disk_total_gb, process_count, load_average)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      cpuUsage.toFixed(2),
-      memoryUsagePercent.toFixed(2),
-      (usedMem / 1024 / 1024).toFixed(2),
-      (totalMem / 1024 / 1024).toFixed(2),
-      diskUsagePercent.toFixed(2),
-      diskUsedGB.toFixed(2),
-      diskTotalGB.toFixed(2),
-      processCount,
-      cpuUsage.toFixed(2)
-    ]);
+    // Save to database - safely handle missing table
+    try {
+      // Check if system_resource_metrics table exists
+      const tableExists = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='system_resource_metrics'",
+        [],
+        null
+      );
+      
+      if (tableExists) {
+        await this.safeQueryWithFallback('run', `
+          INSERT INTO system_resource_metrics 
+          (cpu_usage_percent, memory_usage_percent, memory_used_mb, memory_total_mb, 
+           disk_usage_percent, disk_used_gb, disk_total_gb, process_count, load_average)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          cpuUsage.toFixed(2),
+          memoryUsagePercent.toFixed(2),
+          (usedMem / 1024 / 1024).toFixed(2),
+          (totalMem / 1024 / 1024).toFixed(2),
+          diskUsagePercent.toFixed(2),
+          diskUsedGB,
+          diskTotalGB,
+          processCount,
+          cpuUsage.toFixed(2)
+        ], null);
+      }
+    } catch (e) {
+      // Table might not exist
+    }
     
     // Update system metrics
     await this.updateMetricSafe('system_cpu_usage_percent', cpuUsage.toFixed(2));
     await this.updateMetricSafe('system_memory_usage_percent', memoryUsagePercent.toFixed(2));
     await this.updateMetricSafe('system_memory_used_mb', (usedMem / 1024 / 1024).toFixed(2));
-    await this.updateMetricSafe('system_disk_usage_percent', diskUsagePercent.toFixed(2));
+    await this.updateMetricSafe('system_disk_usage_percent', diskUsagePercent);
     await this.updateMetricSafe('system_disk_used_gb', diskUsedGB);
     await this.updateMetricSafe('system_process_count', processCount.toString());
     await this.updateMetricSafe('system_load_average', cpuUsage.toFixed(2));
@@ -892,36 +1076,62 @@ async getDiskUsage() {
 // Email/SMS Notification Metrics
 async updateNotificationMetrics() {
   try {
+    await this.ensureDatabaseReady();
+    
     console.log('Updating notification metrics...');
     
+    // First check if notification_logs table exists
+    const tableExists = await this.safeQueryWithFallback('get',
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='notification_logs'",
+      [],
+      null
+    );
+    
+    if (!tableExists) {
+      console.log('Notification logs table does not exist, skipping...');
+      return;
+    }
+    
     // Get notification stats
-    const notificationStats = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
-      FROM notification_logs 
-      WHERE created_at >= datetime('now', '-24 hours')
-    `);
+    let notificationStats = { total: 0, sent: 0, failed: 0, pending: 0 };
+    try {
+      const result = await this.safeQueryWithFallback('get', `
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
+          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+        FROM notification_logs 
+        WHERE created_at >= datetime('now', '-24 hours')
+      `, [], notificationStats);
+      notificationStats = result || notificationStats;
+    } catch (e) {
+      // Table might not exist
+    }
     
     // Get notification types
-    const typeStats = await dbOperations.all(`
-      SELECT notification_type, COUNT(*) as count 
-      FROM notification_logs 
-      WHERE created_at >= datetime('now', '-24 hours')
-      GROUP BY notification_type
-    `);
+    const typeStats = [];
+    try {
+      const results = await this.safeQueryWithFallback('all', `
+        SELECT notification_type, COUNT(*) as count 
+        FROM notification_logs 
+        WHERE created_at >= datetime('now', '-24 hours')
+        GROUP BY notification_type
+      `, [], []);
+      typeStats.push(...results);
+    } catch (e) {
+      // Table might not exist
+    }
     
     // Update metrics
-    await this.updateMetricSafe('notifications_total_24h', (notificationStats?.total || 0).toString());
-    await this.updateMetricSafe('notifications_sent_24h', (notificationStats?.sent || 0).toString());
-    await this.updateMetricSafe('notifications_failed_24h', (notificationStats?.failed || 0).toString());
-    await this.updateMetricSafe('notifications_pending', (notificationStats?.pending || 0).toString());
+    await this.updateMetricSafe('notifications_total_24h', (notificationStats.total || 0).toString());
+    await this.updateMetricSafe('notifications_sent_24h', (notificationStats.sent || 0).toString());
+    await this.updateMetricSafe('notifications_failed_24h', (notificationStats.failed || 0).toString());
+    await this.updateMetricSafe('notifications_pending', (notificationStats.pending || 0).toString());
     
     // Calculate success rate
-    const total = notificationStats?.total || 0;
-    const sent = notificationStats?.sent || 0;
+    const total = notificationStats.total || 0;
+    const sent = notificationStats.sent || 0;
     const successRate = total > 0 ? (sent / total) * 100 : 100;
     
     await this.updateMetricSafe('notifications_success_rate', successRate.toFixed(2));
@@ -941,94 +1151,82 @@ async updateNotificationMetrics() {
   }
 }
 
-// Backup Metrics
-async updateBackupMetrics() {
-  try {
-    console.log('Updating backup metrics...');
-    
-    // Get backup stats
-    const backupStats = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-        AVG(duration_seconds) as avg_duration,
-        MAX(created_at) as last_backup
-      FROM backup_logs 
-      WHERE created_at >= datetime('now', '-7 days')
-    `);
-    
-    // Get backup sizes
-    const sizeStats = await dbOperations.get(`
-      SELECT 
-        SUM(size_bytes) as total_size_bytes,
-        AVG(size_bytes) as avg_size_bytes
-      FROM backup_logs 
-      WHERE status = 'success' 
-      AND created_at >= datetime('now', '-30 days')
-    `);
-    
-    // Update metrics
-    await this.updateMetricSafe('backups_total_7d', (backupStats?.total || 0).toString());
-    await this.updateMetricSafe('backups_success_7d', (backupStats?.success || 0).toString());
-    await this.updateMetricSafe('backups_failed_7d', (backupStats?.failed || 0).toString());
-    
-    // Calculate success rate
-    const total = backupStats?.total || 0;
-    const success = backupStats?.success || 0;
-    const successRate = total > 0 ? (success / total) * 100 : 100;
-    
-    await this.updateMetricSafe('backups_success_rate', successRate.toFixed(2));
-    await this.updateMetricSafe('backups_avg_duration_seconds', (backupStats?.avg_duration || 0).toFixed(2));
-    await this.updateMetricSafe('backups_last_completed', backupStats?.last_backup || 'Never');
-    
-    // Size metrics
-    const totalSizeMB = (sizeStats?.total_size_bytes || 0) / (1024 * 1024);
-    const avgSizeMB = (sizeStats?.avg_size_bytes || 0) / (1024 * 1024);
-    
-    await this.updateMetricSafe('backups_total_size_mb', totalSizeMB.toFixed(2));
-    await this.updateMetricSafe('backups_avg_size_mb', avgSizeMB.toFixed(2));
-    
-    console.log('Backup metrics updated');
-    
-  } catch (error) {
-    console.error('Error updating backup metrics:', error.message);
-  }
-}
-
 // Performance Metrics (API Response Times, etc.)
 async updatePerformanceMetrics() {
   try {
+    await this.ensureDatabaseReady();
+    
     console.log('Updating performance metrics...');
     
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     
+    // Check which tables exist
+    const apiMetricsExist = await this.safeQueryWithFallback('get',
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='api_performance_metrics'",
+      [],
+      null
+    );
+    const dbQueryMetricsExist = await this.safeQueryWithFallback('get',
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='database_query_metrics'",
+      [],
+      null
+    );
+    const cacheMetricsExist = await this.safeQueryWithFallback('get',
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='cache_performance_metrics'",
+      [],
+      null
+    );
+    
     // API Performance
-    const apiStats = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total_requests,
-        AVG(response_time_ms) as avg_response_time,
-        MAX(response_time_ms) as max_response_time,
-        MIN(response_time_ms) as min_response_time,
-        SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_requests,
-        SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as server_errors
-      FROM api_performance_metrics 
-      WHERE created_at >= ?
-    `, [oneHourAgo]);
+    let apiStats = { 
+      total_requests: 0, avg_response_time: 0, max_response_time: 0, 
+      min_response_time: 0, error_requests: 0, server_errors: 0 
+    };
+    
+    if (apiMetricsExist) {
+      try {
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT 
+            COUNT(*) as total_requests,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(response_time_ms) as max_response_time,
+            MIN(response_time_ms) as min_response_time,
+            SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_requests,
+            SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as server_errors
+          FROM api_performance_metrics 
+          WHERE created_at >= ?
+        `, [oneHourAgo], apiStats);
+        apiStats = result || apiStats;
+      } catch (e) {
+        // Error getting data
+      }
+    }
     
     // Database Performance
-    const dbStats = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total_queries,
-        AVG(execution_time_ms) as avg_execution_time,
-        MAX(execution_time_ms) as max_execution_time,
-        SUM(CASE WHEN execution_time_ms > 100 THEN 1 ELSE 0 END) as slow_queries
-      FROM database_query_metrics 
-      WHERE created_at >= ?
-    `, [oneHourAgo]);
+    let dbStats = { 
+      total_queries: 0, avg_execution_time: 0, 
+      max_execution_time: 0, slow_queries: 0 
+    };
+    
+    if (dbQueryMetricsExist) {
+      try {
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT 
+            COUNT(*) as total_queries,
+            AVG(execution_time_ms) as avg_execution_time,
+            MAX(execution_time_ms) as max_execution_time,
+            SUM(CASE WHEN execution_time_ms > 100 THEN 1 ELSE 0 END) as slow_queries
+          FROM database_query_metrics 
+          WHERE created_at >= ?
+        `, [oneHourAgo], dbStats);
+        dbStats = result || dbStats;
+      } catch (e) {
+        // Error getting data
+      }
+    }
     
     // Update metrics
-    if (apiStats && apiStats.total_requests > 0) {
+    if (apiStats.total_requests > 0) {
       await this.updateMetricSafe('api_requests_total_1h', apiStats.total_requests.toString());
       await this.updateMetricSafe('api_avg_response_time_ms', apiStats.avg_response_time.toFixed(2));
       await this.updateMetricSafe('api_max_response_time_ms', apiStats.max_response_time.toString());
@@ -1040,20 +1238,28 @@ async updatePerformanceMetrics() {
       await this.updateMetricSafe('api_server_error_rate_percent', serverErrorRate.toFixed(2));
     }
     
-    if (dbStats && dbStats.total_queries > 0) {
+    if (dbStats.total_queries > 0) {
       await this.updateMetricSafe('db_queries_total_1h', dbStats.total_queries.toString());
       await this.updateMetricSafe('db_avg_execution_time_ms', dbStats.avg_execution_time.toFixed(2));
       await this.updateMetricSafe('db_slow_queries_1h', dbStats.slow_queries.toString());
     }
     
     // Cache Performance
-    const cacheStats = await dbOperations.get(`
-      SELECT 
-        SUM(hit_count) as total_hits,
-        SUM(miss_count) as total_misses
-      FROM cache_performance_metrics 
-      WHERE last_accessed >= ?
-    `, [oneHourAgo]);
+    let cacheStats = { total_hits: 0, total_misses: 0 };
+    if (cacheMetricsExist) {
+      try {
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT 
+            SUM(hit_count) as total_hits,
+            SUM(miss_count) as total_misses
+          FROM cache_performance_metrics 
+          WHERE last_accessed >= ?
+        `, [oneHourAgo], cacheStats);
+        cacheStats = result || cacheStats;
+      } catch (e) {
+        // Error getting data
+      }
+    }
     
     if (cacheStats) {
       const totalAccess = (cacheStats.total_hits || 0) + (cacheStats.total_misses || 0);
@@ -1073,83 +1279,180 @@ async updatePerformanceMetrics() {
 // Business Metrics (Revenue, Conversion, etc.)
 async updateBusinessMetricsEnhanced() {
   try {
+    await this.ensureDatabaseReady();
+    
     console.log('Updating enhanced business metrics...');
     const today = new Date().toISOString().split('T')[0];
     
+    // Check if payments table exists and has the right columns
+    const paymentsExist = await this.safeQueryWithFallback('get',
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='payments'",
+      [],
+      null
+    );
+    
     // Revenue Metrics
-    const revenueStats = await dbOperations.get(`
-      SELECT 
-        SUM(total_amount) as total_revenue,
-        SUM(CASE WHEN DATE(created_at) = DATE('now') THEN total_amount ELSE 0 END) as revenue_today,
-        SUM(CASE WHEN DATE(created_at) = DATE('now', '-1 day') THEN total_amount ELSE 0 END) as revenue_yesterday,
-        COUNT(DISTINCT customer_id) as unique_customers
-      FROM payments 
-      WHERE status = 'completed'
-    `);
+    let revenueStats = { 
+      total_revenue: 0, revenue_today: 0, 
+      revenue_yesterday: 0, unique_customers: 0 
+    };
+    
+    if (paymentsExist) {
+      try {
+        // First check if total_amount column exists
+        const tableInfo = await this.safeQueryWithFallback('all',
+          `PRAGMA table_info(payments)`,
+          [],
+          []
+        );
+        
+        const hasTotalAmount = tableInfo.some(col => col.name === 'total_amount');
+        const amountColumn = hasTotalAmount ? 'total_amount' : 'amount';
+        
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT 
+            SUM(${amountColumn}) as total_revenue,
+            SUM(CASE WHEN DATE(created_at) = DATE('now') THEN ${amountColumn} ELSE 0 END) as revenue_today,
+            SUM(CASE WHEN DATE(created_at) = DATE('now', '-1 day') THEN ${amountColumn} ELSE 0 END) as revenue_yesterday,
+            COUNT(DISTINCT customer_id) as unique_customers
+          FROM payments 
+          WHERE status = 'completed'
+        `, [], revenueStats);
+        revenueStats = result || revenueStats;
+      } catch (e) {
+        console.log('Error getting revenue stats:', e.message);
+      }
+    }
     
     // Ticket Metrics
-    const ticketStats = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total_tickets,
-        SUM(CASE WHEN DATE(created_at) = DATE('now') THEN quantity ELSE 0 END) as tickets_today,
-        AVG(total_amount / quantity) as avg_ticket_price
-      FROM tickets 
-      WHERE status = 'confirmed'
-    `);
+    let ticketStats = { 
+      total_tickets: 0, tickets_today: 0, avg_ticket_price: 0 
+    };
+    
+    try {
+      const ticketsExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tickets'",
+        [],
+        null
+      );
+      
+      if (ticketsExist) {
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT 
+            COUNT(*) as total_tickets,
+            SUM(CASE WHEN DATE(created_at) = DATE('now') THEN quantity ELSE 0 END) as tickets_today,
+            AVG(total_amount / quantity) as avg_ticket_price
+          FROM tickets 
+          WHERE status = 'confirmed'
+        `, [], ticketStats);
+        ticketStats = result || ticketStats;
+      }
+    } catch (e) {
+      // Table might not exist
+    }
     
     // Event Metrics
-    const eventStats = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total_events,
-        SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active_events,
-        SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) as pending_events,
-        AVG(price) as avg_event_price,
-        SUM(capacity) as total_capacity,
-        SUM(max_attendees) as total_max_attendees
-      FROM events 
-      WHERE archived = 0
-    `);
+    let eventStats = { 
+      total_events: 0, active_events: 0, pending_events: 0, 
+      avg_event_price: 0, total_capacity: 0, total_max_attendees: 0 
+    };
+    
+    try {
+      const eventsExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='events'",
+        [],
+        null
+      );
+      
+      if (eventsExist) {
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT 
+            COUNT(*) as total_events,
+            SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active_events,
+            SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) as pending_events,
+            AVG(price) as avg_event_price,
+            SUM(capacity) as total_capacity,
+            SUM(max_attendees) as total_max_attendees
+          FROM events 
+          WHERE archived = 0
+        `, [], eventStats);
+        eventStats = result || eventStats;
+      }
+    } catch (e) {
+      // Table might not exist
+    }
     
     // User Growth
-    const userGrowth = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total_users,
-        SUM(CASE WHEN DATE(created_at) = DATE('now') THEN 1 ELSE 0 END) as new_users_today,
-        SUM(CASE WHEN DATE(created_at) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as new_users_week,
-        SUM(CASE WHEN DATE(last_login) = DATE('now') THEN 1 ELSE 0 END) as active_users_today
-      FROM (
-        SELECT customer_id as id, created_at, last_login FROM customers WHERE status = 'active'
-        UNION ALL
-        SELECT manager_id as id, created_at, last_login FROM event_managers WHERE status = 'active'
-        UNION ALL
-        SELECT admin_id as id, created_at, last_login FROM admins WHERE status = 'active'
-      ) users
-    `);
+    let userGrowth = { 
+      total_users: 0, new_users_today: 0, 
+      new_users_week: 0, active_users_today: 0 
+    };
+    
+    try {
+      // Check which user tables exist
+      const customersExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='customers'",
+        [],
+        null
+      );
+      const managersExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='event_managers'",
+        [],
+        null
+      );
+      const adminsExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='admins'",
+        [],
+        null
+      );
+      
+      let queryParts = [];
+      if (customersExist) queryParts.push("SELECT customer_id as id, created_at, last_login FROM customers WHERE status = 'active'");
+      if (managersExist) queryParts.push("SELECT manager_id as id, created_at, last_login FROM event_managers WHERE status = 'active'");
+      if (adminsExist) queryParts.push("SELECT admin_id as id, created_at, last_login FROM admins WHERE status = 'active'");
+      
+      if (queryParts.length > 0) {
+        const query = queryParts.join('\nUNION ALL\n');
+        const result = await this.safeQueryWithFallback('get', `
+          SELECT 
+            COUNT(*) as total_users,
+            SUM(CASE WHEN DATE(created_at) = DATE('now') THEN 1 ELSE 0 END) as new_users_today,
+            SUM(CASE WHEN DATE(created_at) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as new_users_week,
+            SUM(CASE WHEN DATE(last_login) = DATE('now') THEN 1 ELSE 0 END) as active_users_today
+          FROM (
+            ${query}
+          ) users
+        `, [], userGrowth);
+        userGrowth = result || userGrowth;
+      }
+    } catch (e) {
+      // Tables might not exist
+    }
     
     // Update metrics
-    await this.updateMetricSafe('revenue_total', (revenueStats?.total_revenue || 0).toFixed(2));
-    await this.updateMetricSafe('revenue_today', (revenueStats?.revenue_today || 0).toFixed(2));
-    await this.updateMetricSafe('revenue_yesterday', (revenueStats?.revenue_yesterday || 0).toFixed(2));
-    await this.updateMetricSafe('unique_customers', (revenueStats?.unique_customers || 0).toString());
+    await this.updateMetricSafe('revenue_total', (revenueStats.total_revenue || 0).toFixed(2));
+    await this.updateMetricSafe('revenue_today', (revenueStats.revenue_today || 0).toFixed(2));
+    await this.updateMetricSafe('revenue_yesterday', (revenueStats.revenue_yesterday || 0).toFixed(2));
+    await this.updateMetricSafe('unique_customers', (revenueStats.unique_customers || 0).toString());
     
-    await this.updateMetricSafe('tickets_total', (ticketStats?.total_tickets || 0).toString());
-    await this.updateMetricSafe('tickets_today', (ticketStats?.tickets_today || 0).toString());
-    await this.updateMetricSafe('avg_ticket_price', (ticketStats?.avg_ticket_price || 0).toFixed(2));
+    await this.updateMetricSafe('tickets_total', (ticketStats.total_tickets || 0).toString());
+    await this.updateMetricSafe('tickets_today', (ticketStats.tickets_today || 0).toString());
+    await this.updateMetricSafe('avg_ticket_price', (ticketStats.avg_ticket_price || 0).toFixed(2));
     
-    await this.updateMetricSafe('events_total', (eventStats?.total_events || 0).toString());
-    await this.updateMetricSafe('events_active', (eventStats?.active_events || 0).toString());
-    await this.updateMetricSafe('events_pending', (eventStats?.pending_events || 0).toString());
-    await this.updateMetricSafe('avg_event_price', (eventStats?.avg_event_price || 0).toFixed(2));
-    await this.updateMetricSafe('total_capacity', (eventStats?.total_capacity || 0).toString());
+    await this.updateMetricSafe('events_total', (eventStats.total_events || 0).toString());
+    await this.updateMetricSafe('events_active', (eventStats.active_events || 0).toString());
+    await this.updateMetricSafe('events_pending', (eventStats.pending_events || 0).toString());
+    await this.updateMetricSafe('avg_event_price', (eventStats.avg_event_price || 0).toFixed(2));
+    await this.updateMetricSafe('total_capacity', (eventStats.total_capacity || 0).toString());
     
-    await this.updateMetricSafe('users_total', (userGrowth?.total_users || 0).toString());
-    await this.updateMetricSafe('users_new_today', (userGrowth?.new_users_today || 0).toString());
-    await this.updateMetricSafe('users_new_week', (userGrowth?.new_users_week || 0).toString());
-    await this.updateMetricSafe('users_active_today', (userGrowth?.active_users_today || 0).toString());
+    await this.updateMetricSafe('users_total', (userGrowth.total_users || 0).toString());
+    await this.updateMetricSafe('users_new_today', (userGrowth.new_users_today || 0).toString());
+    await this.updateMetricSafe('users_new_week', (userGrowth.new_users_week || 0).toString());
+    await this.updateMetricSafe('users_active_today', (userGrowth.active_users_today || 0).toString());
     
     // Calculate growth rates
-    const revenueToday = revenueStats?.revenue_today || 0;
-    const revenueYesterday = revenueStats?.revenue_yesterday || 0;
+    const revenueToday = revenueStats.revenue_today || 0;
+    const revenueYesterday = revenueStats.revenue_yesterday || 0;
     const revenueGrowth = revenueYesterday > 0 ? 
       ((revenueToday - revenueYesterday) / revenueYesterday) * 100 : 
       (revenueToday > 0 ? 100 : 0);
@@ -1157,10 +1460,22 @@ async updateBusinessMetricsEnhanced() {
     await this.updateMetricSafe('revenue_growth_rate', revenueGrowth.toFixed(2));
     
     // Save to business metrics table
-    await this.updateBusinessMetricSafe(today, 'revenue', revenueToday);
-    await this.updateBusinessMetricSafe(today, 'tickets_sold', ticketStats?.tickets_today || 0);
-    await this.updateBusinessMetricSafe(today, 'new_users', userGrowth?.new_users_today || 0);
-    await this.updateBusinessMetricSafe(today, 'active_users', userGrowth?.active_users_today || 0);
+    try {
+      const businessMetricsExist = await this.safeQueryWithFallback('get',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='business_metrics'",
+        [],
+        null
+      );
+      
+      if (businessMetricsExist) {
+        await this.updateBusinessMetricSafe(today, 'revenue', revenueToday);
+        await this.updateBusinessMetricSafe(today, 'tickets_sold', ticketStats.tickets_today || 0);
+        await this.updateBusinessMetricSafe(today, 'new_users', userGrowth.new_users_today || 0);
+        await this.updateBusinessMetricSafe(today, 'active_users', userGrowth.active_users_today || 0);
+      }
+    } catch (e) {
+      // Table might not exist
+    }
     
     console.log('Enhanced business metrics updated');
     
@@ -1172,57 +1487,14 @@ async updateBusinessMetricsEnhanced() {
 // Helper method for business metrics
 async updateBusinessMetricSafe(date, type, value) {
   try {
-    await dbOperations.run(`
+    await this.ensureDatabaseReady();
+    
+    await this.safeQueryWithFallback('run', `
       INSERT OR REPLACE INTO business_metrics (metric_date, metric_type, metric_value, updated_at)
       VALUES (?, ?, ?, datetime('now'))
-    `, [date, type, value]);
+    `, [date, type, value], null);
   } catch (error) {
     console.error(`Error updating business metric ${type}:`, error.message);
-  }
-}
-
-// Update the updateAllMetricsSafe method to include all new metrics:
-async updateAllMetricsSafe() {
-  try {
-    if (!this.isRunning) return;
-    
-    console.log('Starting comprehensive metrics update...');
-    
-    // Run each metric update separately with error handling
-    const updates = [
-      this.updateUptimeMetrics(),
-      this.updateDatabaseMetrics(),
-      this.updateResponseTimeMetrics(),
-      this.updateSecurityMetrics(),
-      this.updateBackupMetrics(),
-      this.updateBusinessMetrics(),
-      
-      // NEW METRICS
-      this.updateDatabaseManagementMetrics(),
-      this.updateSystemLogsMetrics(),
-      this.updateSystemResourceMetrics(),
-      this.updateNotificationMetrics(),
-      this.updateBackupMetrics(),
-      this.updatePerformanceMetrics(),
-      this.updateBusinessMetricsEnhanced()
-    ];
-    
-    // Run all updates, don't fail if some fail
-    for (const update of updates) {
-      try {
-        await update;
-        console.log(`✓ Completed: ${update.name || 'Unknown update'}`);
-      } catch (error) {
-        console.log(`✗ Failed ${update.name || 'Unknown update'}:`, error.message);
-      }
-    }
-    
-    await this.checkAndGenerateAlerts();
-    
-    console.log('✅ All metrics updated successfully');
-    
-  } catch (error) {
-    console.error('Error in safe metrics update:', error.message);
   }
 }
 

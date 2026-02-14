@@ -1999,50 +1999,331 @@ const AdminToolsDashboard = () => {
     </div>
   );
 
-  const EventApprovalsView = () => (
-    <div className="space-y-6 h-full flex flex-col">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Event Approvals</h2>
-        <p className="text-sm text-gray-500 mt-1">Review and approve pending events</p>
-      </div>
+  // UPDATED: Event Approvals View with API integration
+  const EventApprovalsView = () => {
+    const [pendingEvents, setPendingEvents] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedEvent, setSelectedEvent] = useState(null);
+    const [showApprovalModal, setShowApprovalModal] = useState(false);
+    const [rejectReason, setRejectReason] = useState('');
+    const [approvalNotes, setApprovalNotes] = useState('');
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold">{adminData?.platform?.pendingApprovals}</span> events waiting for approval
-          </p>
+    const fetchPendingEvents = async () => {
+      try {
+        setLoading(true);
+        const token = getToken();
+        const response = await fetch(`${API_URL}/api/events/pending/approvals`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setPendingEvents(result.events || []);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching pending events:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleApproveEvent = async (eventId) => {
+      try {
+        const token = getToken();
+        const response = await fetch(`${API_URL}/api/events/${eventId}/validate`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            notes: approvalNotes
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            // Refresh the pending events list
+            await fetchPendingEvents();
+            setShowApprovalModal(false);
+            setSelectedEvent(null);
+            setApprovalNotes('');
+            
+            // Show success message
+            alert('Event approved successfully!');
+          }
+        }
+      } catch (error) {
+        console.error('Error approving event:', error);
+        alert('Failed to approve event');
+      }
+    };
+
+    const handleRejectEvent = async (eventId) => {
+      if (!rejectReason.trim()) {
+        alert('Please provide a reason for rejection');
+        return;
+      }
+      
+      try {
+        const token = getToken();
+        const response = await fetch(`${API_URL}/api/events/${eventId}/reject`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            reason: rejectReason
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            // Refresh the pending events list
+            await fetchPendingEvents();
+            setShowApprovalModal(false);
+            setSelectedEvent(null);
+            setRejectReason('');
+            
+            // Show success message
+            alert('Event rejected successfully!');
+          }
+        }
+      } catch (error) {
+        console.error('Error rejecting event:', error);
+        alert('Failed to reject event');
+      }
+    };
+
+    const handleViewEventDetails = async (eventId) => {
+      try {
+        const token = getToken();
+        const response = await fetch(`${API_URL}/api/events/${eventId}/approval-details`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setSelectedEvent(result.event);
+            setShowApprovalModal(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching event details:', error);
+      }
+    };
+
+    useEffect(() => {
+      fetchPendingEvents();
+    }, []);
+
+    return (
+      <div className="space-y-6 h-full flex flex-col">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Event Approvals</h2>
+            <p className="text-sm text-gray-500 mt-1">Review and approve pending events from organizers</p>
+          </div>
+          <button 
+            onClick={fetchPendingEvents}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Icon name="RefreshCw" size={20} color="#4b5563" />
+          </button>
         </div>
-        <div className="divide-y divide-gray-200 flex-1 overflow-auto">
-          {adminData?.platform?.pendingEvents?.map((event) => (
-            <div key={event.id} className="p-6 hover:bg-gray-50 transition-colors cursor-pointer">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-2">{event.name}</h3>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-sm text-gray-500 mb-3">
-                    <span>Organizer: {event.organizer}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>Category: {event.category}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>Submitted {event.submitted}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <button className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2">
-                      <Icon name="CheckCircle" size={16} />
-                      Approve
-                    </button>
-                    <button className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors flex items-center gap-2">
-                      <Icon name="XCircle" size={16} />
-                      Reject
-                    </button>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="animate-spin">
+              <Icon name="RefreshCw" size={24} color="#6366f1" />
+            </div>
+          </div>
+        ) : pendingEvents.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+            <Icon name="CheckCircle" size={48} color="#10b981" className="mx-auto mb-4" />
+            <p className="text-lg font-semibold text-gray-900">No Pending Approvals</p>
+            <p className="text-gray-500 mt-1">All events have been processed</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col">
+            <div className="p-4 border-b border-gray-200">
+              <p className="text-sm text-gray-600">
+                <span className="font-semibold">{pendingEvents.length}</span> events waiting for approval
+              </p>
+            </div>
+            <div className="divide-y divide-gray-200 flex-1 overflow-auto">
+              {pendingEvents.map((event) => (
+                <div key={event.id} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
+                          <Icon name="Activity" size={24} color="#3b82f6" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900 mb-1">{event.name}</h3>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-sm text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <Icon name="Mail" size={12} />
+                              {event.organizer}
+                            </span>
+                            <span className="hidden sm:inline">•</span>
+                            <span className="flex items-center gap-1">
+                              <Icon name="Tag" size={12} />
+                              {event.category}
+                            </span>
+                            <span className="hidden sm:inline">•</span>
+                            <span className="flex items-center gap-1">
+                              <Icon name="Clock" size={12} />
+                              Submitted {event.submitted}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-3 mt-4">
+                        <button 
+                          onClick={() => handleViewEventDetails(event.id)}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                        >
+                          <Icon name="Edit" size={16} />
+                          View Details
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setSelectedEvent(event);
+                            setShowApprovalModal(true);
+                          }}
+                          className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                        >
+                          <Icon name="CheckCircle" size={16} />
+                          Quick Approve
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setSelectedEvent(event);
+                            setShowApprovalModal(true);
+                            setRejectReason('');
+                          }}
+                          className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
+                        >
+                          <Icon name="XCircle" size={16} />
+                          Reject
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Approval Modal */}
+        {showApprovalModal && selectedEvent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-xl font-bold text-gray-900">Review Event: {selectedEvent.name}</h3>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Event Details</h4>
+                    <div className="space-y-2 text-sm">
+                      <p><span className="font-medium">Organizer:</span> {selectedEvent.organizer}</p>
+                      <p><span className="font-medium">Category:</span> {selectedEvent.category}</p>
+                      <p><span className="font-medium">Submitted:</span> {selectedEvent.submitted}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Ticket Information</h4>
+                    {selectedEvent.ticket_types && selectedEvent.ticket_types.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedEvent.ticket_types.map((ticket, idx) => (
+                          <div key={idx} className="text-sm">
+                            <span className="font-medium">{ticket.name}:</span> R{ticket.price} ({ticket.quantity} available)
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No ticket information available</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Approval Notes (Optional)</h4>
+                  <textarea
+                    value={approvalNotes}
+                    onChange={(e) => setApprovalNotes(e.target.value)}
+                    placeholder="Add notes about this approval..."
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                  />
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Rejection Reason (Required for rejection)</h4>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Please provide a reason for rejecting this event..."
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowApprovalModal(false);
+                    setSelectedEvent(null);
+                    setApprovalNotes('');
+                    setRejectReason('');
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleRejectEvent(selectedEvent.id)}
+                  disabled={!rejectReason.trim()}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    rejectReason.trim() 
+                      ? 'bg-red-600 text-white hover:bg-red-700' 
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  Reject Event
+                </button>
+                <button
+                  onClick={() => handleApproveEvent(selectedEvent.id)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+                >
+                  Approve Event
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const DatabaseManagementView = () => (
     <div className="space-y-6 h-full flex flex-col">
@@ -2835,7 +3116,7 @@ const AdminToolsDashboard = () => {
                           <Icon name="Clock" size={20} color="#f59e0b" />
                         </div>
                         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pending Approvals</span>
-                      </div>
+                        </div>
                       <div className="text-2xl font-bold text-gray-900 mb-1">
                         {adminData?.platform?.pendingApprovals || 0}
                       </div>

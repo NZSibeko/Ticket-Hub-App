@@ -1,11 +1,13 @@
+// App.web.js - MERGED VERSION
 import { Ionicons } from '@expo/vector-icons';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 
+// Import existing screens
 import AdminDashboardScreen from './src/screens/AdminDashboardScreen.web';
 import AdminToolsDashboard from './src/screens/AdminToolsDashboard.web';
 import CreateEventScreen from './src/screens/CreateEventScreen.web';
@@ -26,6 +28,12 @@ import SearchEventsScreen from './src/screens/SearchEventsScreen.web';
 import TermsConditionsScreen from './src/screens/TermsConditionsScreen.web';
 import TicketPurchaseScreen from './src/screens/TicketPurchaseScreen';
 import UserManagementDashboard from './src/screens/UserManagementDashboard.web';
+
+// Import NEW screens
+import EventOrganizerEventsScreen from './src/screens/EventOrganizerEventsScreen.web';
+import EventOrganizerToolsScreen from './src/screens/EventOrganizerToolsScreen.web';
+import SupportChatScreen from './src/screens/SupportChatScreen.web';
+import SupportScannerScreen from './src/screens/SupportScannerScreen.web';
 
 const Stack = createStackNavigator();
 const TopTab = createMaterialTopTabNavigator();
@@ -128,54 +136,62 @@ const CustomerTabs = () => (
   </TabContainer>
 );
 
-const AdminTabs = () => (
-  <TabContainer>
-    <TopTab.Navigator
-      screenOptions={{
-        tabBarStyle: [styles.tabBar, styles.fixedTabBar],
-        tabBarActiveTintColor: '#6366f1',
-        tabBarInactiveTintColor: '#6b7280',
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarIndicatorStyle: styles.tabIndicator,
-        tabBarShowIcon: true,
-        tabBarIconStyle: styles.tabIcon,
-      }}
-    >
-      <TopTab.Screen 
-        name="AdminDashboard" 
-        component={AdminToolsDashboard}
-        options={{ 
-          title: 'Admin Tools',
-          tabBarIcon: ({ color }) => <Ionicons name="shield-checkmark" size={20} color={color} />
+const AdminTabs = () => {
+  const { user } = useAuth();
+  
+  useEffect(() => {
+    console.log('🔵 AdminTabs mounted for user:', user?.email, 'Role:', user?.role);
+  }, [user]);
+
+  return (
+    <TabContainer>
+      <TopTab.Navigator
+        screenOptions={{
+          tabBarStyle: [styles.tabBar, styles.fixedTabBar],
+          tabBarActiveTintColor: '#6366f1',
+          tabBarInactiveTintColor: '#6b7280',
+          tabBarLabelStyle: styles.tabLabel,
+          tabBarIndicatorStyle: styles.tabIndicator,
+          tabBarShowIcon: true,
+          tabBarIconStyle: styles.tabIcon,
         }}
-      />
-      <TopTab.Screen 
-        name="Events" 
-        component={EventManagementScreen}
-        options={{ 
-          title: 'Events',
-          tabBarIcon: ({ color }) => <Ionicons name="calendar" size={20} color={color} />
-        }}
-      />
-      <TopTab.Screen 
-        name="Users" 
-        component={UserManagementDashboard}
-        options={{ 
-          title: 'Users',
-          tabBarIcon: ({ color }) => <Ionicons name="people" size={20} color={color} />
-        }}
-      />
-      <TopTab.Screen 
-        name="Profile" 
-        component={ProfileScreen}
-        options={{ 
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />
-        }}
-      />
-    </TopTab.Navigator>
-  </TabContainer>
-);
+      >
+        <TopTab.Screen 
+          name="AdminDashboard" 
+          component={AdminToolsDashboard}
+          options={{ 
+            title: 'Admin Tools',
+            tabBarIcon: ({ color }) => <Ionicons name="shield-checkmark" size={20} color={color} />
+          }}
+        />
+        <TopTab.Screen 
+          name="Events" 
+          component={EventManagementScreen}
+          options={{ 
+            title: 'Events',
+            tabBarIcon: ({ color }) => <Ionicons name="calendar" size={20} color={color} />
+          }}
+        />
+        <TopTab.Screen 
+          name="Users" 
+          component={UserManagementDashboard}
+          options={{ 
+            title: 'Users',
+            tabBarIcon: ({ color }) => <Ionicons name="people" size={20} color={color} />
+          }}
+        />
+        <TopTab.Screen 
+          name="Profile" 
+          component={ProfileScreen}
+          options={{ 
+            title: 'Profile',
+            tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />
+          }}
+        />
+      </TopTab.Navigator>
+    </TabContainer>
+  );
+};
 
 const EventManagerTabs = () => (
   <TabContainer>
@@ -226,26 +242,176 @@ const EventManagerTabs = () => (
   </TabContainer>
 );
 
+const EventOrganizerTabs = () => (
+  <TabContainer>
+    <TopTab.Navigator
+      screenOptions={{
+        tabBarStyle: [styles.tabBar, styles.fixedTabBar],
+        tabBarActiveTintColor: '#6366f1',
+        tabBarInactiveTintColor: '#6b7280',
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIndicatorStyle: styles.tabIndicator,
+        tabBarShowIcon: true,
+        tabBarIconStyle: styles.tabIcon,
+      }}
+    >
+      <TopTab.Screen 
+        name="OrganizerTools" 
+        component={EventOrganizerToolsScreen}
+        options={{ 
+          title: 'Tools',
+          tabBarIcon: ({ color }) => <Ionicons name="analytics" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="EventOrganizerEventsScreen" 
+        component={EventOrganizerEventsScreen}
+        options={{ 
+          title: 'Events',
+          tabBarIcon: ({ color }) => <Ionicons name="calendar" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="OrganizerTickets" 
+        component={MyTicketsScreen}
+        options={{ 
+          title: 'Tickets',
+          tabBarIcon: ({ color }) => <Ionicons name="ticket" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="OrganizerProfile" 
+        component={ProfileScreen}
+        options={{ 
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />
+        }}
+      />
+    </TopTab.Navigator>
+  </TabContainer>
+);
+
+const SupportTabs = () => (
+  <TabContainer>
+    <TopTab.Navigator
+      screenOptions={{
+        tabBarStyle: [styles.tabBar, styles.fixedTabBar],
+        tabBarActiveTintColor: '#6366f1',
+        tabBarInactiveTintColor: '#6b7280',
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIndicatorStyle: styles.tabIndicator,
+        tabBarShowIcon: true,
+        tabBarIconStyle: styles.tabIcon,
+      }}
+    >
+      <TopTab.Screen 
+        name="SupportChat" 
+        component={SupportChatScreen}
+        options={{ 
+          title: 'Chat',
+          tabBarIcon: ({ color }) => <Ionicons name="chatbubbles" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="SupportEvents" 
+        component={SearchEventsScreen}
+        options={{ 
+          title: 'Events',
+          tabBarIcon: ({ color }) => <Ionicons name="search" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="Scanner" 
+        component={SupportScannerScreen}
+        options={{ 
+          title: 'Scanner',
+          tabBarIcon: ({ color }) => <Ionicons name="ticket" size={20} color={color} />
+        }}
+      />
+      <TopTab.Screen 
+        name="SupportProfile" 
+        component={ProfileScreen}
+        options={{ 
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />
+        }}
+      />
+    </TopTab.Navigator>
+  </TabContainer>
+);
+
 const RootNavigator = () => {
   const { user, isLoading, hasAdminPrivileges } = useAuth();
 
+  useEffect(() => {
+    if (user) {
+      console.log('🔵 RootNavigator - User logged in:', {
+        email: user.email,
+        role: user.role,
+        displayRole: user.displayRole,
+        userType: user.userType,
+        hasAdminPrivileges: hasAdminPrivileges && hasAdminPrivileges()
+      });
+    } else {
+      console.log('⚪ RootNavigator - No user logged in');
+    }
+  }, [user]);
+
   if (isLoading) {
+    console.log('⏳ RootNavigator - Loading...');
     return <LoadingFallback />;
   }
 
   const getUserTabs = () => {
-    if (!user) return CustomerTabs;
-
-    const roleLower = user.role?.toLowerCase() || '';
-
-    if (roleLower === 'event_manager') {
-      return EventManagerTabs;
+    if (!user) {
+      console.log('🔴 getUserTabs - No user, returning CustomerTabs');
+      return CustomerTabs;
     }
 
-    if (hasAdminPrivileges()) {
+    // Check multiple possible role properties with enhanced debugging
+    const role = user.role || user.userType || user.displayRole || '';
+    const roleLower = role.toLowerCase();
+    
+    console.log('🔍 DEBUG - getUserTabs user object:', {
+      email: user.email,
+      role: user.role,
+      userType: user.userType,
+      displayRole: user.displayRole,
+      normalizedRole: roleLower
+    });
+
+    // Enhanced logging for debugging
+    console.log('🟡 Checking role:', roleLower, 'against known roles');
+    
+    // DIRECT ROLE MAPPING
+    if (roleLower === 'support' || roleLower === 'support_staff') {
+      console.log('✅ Direct match: support role, returning SupportTabs');
+      return SupportTabs;
+    }
+    
+    if (roleLower === 'event_organizer' || roleLower.includes('organizer')) {
+      console.log('✅ Direct match: event_organizer role, returning EventOrganizerTabs');
+      return EventOrganizerTabs;
+    }
+    
+    if (roleLower === 'event_manager' || roleLower.includes('manager')) {
+      console.log('✅ Direct match: event_manager role, returning EventManagerTabs');
+      return EventManagerTabs;
+    }
+    
+    if (roleLower === 'admin' || roleLower === 'super_admin') {
+      console.log('✅ Direct match: admin role, returning AdminTabs');
+      return AdminTabs;
+    }
+    
+    // Check for admin privileges
+    if (hasAdminPrivileges && hasAdminPrivileges()) {
+      console.log('✅ User has admin privileges, returning AdminTabs');
       return AdminTabs;
     }
 
+    // Default to customer
+    console.log('⚪ Defaulting to CustomerTabs for role:', roleLower);
     return CustomerTabs;
   };
 
@@ -265,16 +431,20 @@ const RootNavigator = () => {
         <Stack.Screen name="MainTabs" component={TabsComponent} />
       )}
       
-      <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
-      <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} />
-      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      {/* Common Screens */}
       <Stack.Screen name="EventDetail" component={EventDetailScreen} />
       <Stack.Screen name="PurchaseTicket" component={TicketPurchaseScreen} />
       <Stack.Screen name="Payment" component={PaymentScreen} />
       <Stack.Screen name="PaymentSuccess" component={PaymentSuccess} />
       <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
       <Stack.Screen name="Scanner" component={ScannerScreen} />
+      <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+      <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       <Stack.Screen name="BrowseEvents" component={SearchEventsScreen} />
+      <Stack.Screen name="EventOrganizerTools" component={EventOrganizerToolsScreen} />
+      <Stack.Screen name="SupportChat" component={SupportChatScreen} />
+      <Stack.Screen name="SupportScanner" component={SupportScannerScreen} />
     </Stack.Navigator>
   );
 };

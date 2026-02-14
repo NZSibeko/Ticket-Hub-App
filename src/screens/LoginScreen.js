@@ -16,12 +16,10 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
-// Import the new local image (assuming this path is correct relative to the component)
 const Logo = require('../assets/images/tickethub-logo.png');
 
 const { width, height } = Dimensions.get('window');
 
-// Responsive scaling functions - matching ProfileScreen
 const scaleSize = (size) => {
   const scale = width / 375;
   return Math.ceil(size * Math.min(scale, 1.5));
@@ -40,21 +38,33 @@ const LoginScreen = ({ navigation }) => {
 
   const handleLogin = async () => {
     if (!username || !password) {
-      Alert.alert('Error', 'Please enter both username and password');
+      Alert.alert('Error', 'Please enter both email/username and password');
       return;
     }
 
     setIsLoading(true);
     try {
+      console.log('🔐 LoginScreen: Attempting login for:', username);
+      
+      // FIXED: Pass username (which could be email) instead of undefined "email" variable
       const result = await login(username, password);
       
+      console.log('🔐 LoginScreen: Login result:', result);
+      
       if (result.success) {
-        navigation.replace('MainApp');
+        console.log('✅ LoginScreen: Login successful, user role:', result.user?.role);
+        // Navigation is handled in AuthContext now, but we can add a fallback
+        if (navigation) {
+          // Give the AuthContext time to set the user state
+          setTimeout(() => {
+            navigation.replace('MainTabs');
+          }, 100);
+        }
       } else {
         Alert.alert('Login Failed', result.error || 'Invalid credentials');
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ LoginScreen: Login error:', error);
       Alert.alert('Login Error', 'An error occurred during login. Please try again.');
     } finally {
       setIsLoading(false);
@@ -73,7 +83,6 @@ const LoginScreen = ({ navigation }) => {
     navigation.navigate('Registration');
   };
 
-  // Calculate responsive widths
   const getCardWidth = () => {
     if (width >= 768) {
       return Math.min(width - 80, 400);
@@ -192,7 +201,7 @@ const LoginScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Terms and Privacy - Moved outside form card */}
+            {/* Terms and Privacy */}
             <View style={[styles.termsContainer, { width: getCardWidth() }]}>
               <Text style={styles.termsText}>
                 By signing in, you agree to our{' '}
@@ -241,18 +250,18 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 15, // Decreased margin
+    marginBottom: 15,
   },
   logoWrapper: {
-    marginBottom: 5, // Decreased margin
+    marginBottom: 5,
   },
   logoImage: {
-    width: scaleSize(120), // Updated to 100x100
-    height: scaleSize(120), // Updated to 100x100
+    width: scaleSize(120),
+    height: scaleSize(120),
   },
   formContainer: {
     backgroundColor: '#fff',
-    padding: 18, // Decreased padding
+    padding: 18,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -261,7 +270,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: '#f1f5f9',
-    marginBottom: 10, // Decreased margin
+    marginBottom: 10,
   },
   welcomeText: {
     fontSize: scaleFont(20),
@@ -273,7 +282,7 @@ const styles = StyleSheet.create({
   instructionText: {
     fontSize: scaleFont(14),
     color: '#64748b',
-    marginBottom: 16, // Decreased margin
+    marginBottom: 16,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -301,7 +310,7 @@ const styles = StyleSheet.create({
   },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
-    marginBottom: 12, // Decreased margin
+    marginBottom: 12,
   },
   forgotPasswordText: {
     fontSize: scaleFont(14),
@@ -319,7 +328,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
-    marginBottom: 10, // Decreased margin
+    marginBottom: 10,
   },
   loginButtonDisabled: {
     backgroundColor: '#6b7280',
@@ -343,7 +352,7 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 12, // Decreased margin
+    marginVertical: 12,
   },
   dividerLine: {
     flex: 1,
@@ -370,6 +379,7 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: scaleFont(14),
     fontWeight: '600',
+    marginLeft: 4,
   },
   termsContainer: {
     backgroundColor: '#fff',
@@ -395,4 +405,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LoginScreen
+export default LoginScreen;

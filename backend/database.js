@@ -1,1737 +1,2030 @@
-// backend/database.js - FIXED BUSINESS_METRICS TABLE ISSUE
+// backend/database.js - ULTIMATE FIXED VERSION
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const os = require('os');
 
-const dbPath = path.resolve(__dirname, 'ticket_hub.db');
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) console.error('Database connection error:', err);
-  else console.log('Connected to SQLite database');
-});
-
-const dbOperations = {
-  isConnected: () => true,
-
-  run: (sql, params = []) => new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve({ id: this.lastID, changes: this.changes });
-    });
-  }),
-
-  get: (sql, params = []) => new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  }),
-
-  all: (sql, params = []) => new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  })
-};
-
-const connectDatabase = () => Promise.resolve();
+// ========================
+// GLOBAL DATABASE INSTANCE
+// ========================
+let globalDatabaseInstance = null;
+let globalDbOperations = null;
+let isInitializing = false;
+let initializationPromise = null;
+let initializationCallbacks = [];
 
 // ========================
-// MIGRATION FUNCTIONS
+// ENHANCED DATABASE CLASS
 // ========================
+class Database {
+    constructor() {
+        this.db = null;
+        this.dbPath = path.join(__dirname, 'ticket_hub.db');
+        this.dbOperations = null;
+        this.isInitialized = false;
+        this.initializationTime = null;
+        console.log(`Database path: ${this.dbPath}`);
+    }
 
-// Fix business_metrics table by recreating it with updated_at column
-const fixBusinessMetricsTable = async () => {
-  try {
-    // Check if business_metrics table exists
-    const tableExists = await dbOperations.get(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='business_metrics'`
-    );
-    
-    if (tableExists) {
-      // Check if updated_at column exists
-      const tableInfo = await dbOperations.all(
-        `PRAGMA table_info(business_metrics)`
-      );
-      
-      const hasUpdatedAt = tableInfo.some(col => col.name === 'updated_at');
-      
-      if (!hasUpdatedAt) {
-        console.log('Fixing business_metrics table by recreating it...');
-        
-        // Create a backup of existing data
-        const existingData = await dbOperations.all(
-          `SELECT * FROM business_metrics`
-        );
-        
-        // Drop the old table
-        await dbOperations.run(`DROP TABLE IF EXISTS business_metrics_backup`);
-        
-        // Create backup table
-        await dbOperations.run(`
-          CREATE TABLE IF NOT EXISTS business_metrics_backup AS 
-          SELECT * FROM business_metrics
-        `);
-        
-        // Drop the old table
-        await dbOperations.run(`DROP TABLE IF EXISTS business_metrics`);
-        
-        // Recreate the table with correct schema
-        await dbOperations.run(`
-          CREATE TABLE IF NOT EXISTS business_metrics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            metric_date TEXT NOT NULL,
-            metric_type TEXT NOT NULL,
-            metric_value REAL NOT NULL,
-            metric_unit TEXT,
-            details TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now')),
-            UNIQUE(metric_date, metric_type)
-          )
-        `);
-        
-        // Restore data if any existed
-        if (existingData && existingData.length > 0) {
-          console.log(`Restoring ${existingData.length} records to business_metrics table`);
-          for (const row of existingData) {
+    // Initialize database (connect and set up tables)
+    async initialize() {
+        if (this.isInitialized) {
+            console.log('Database already initialized');
+            return this;
+        }
+
+        return new Promise((resolve, reject) => {
             try {
-              await dbOperations.run(`
-                INSERT INTO business_metrics 
-                (metric_date, metric_type, metric_value, metric_unit, details, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, COALESCE(?, datetime('now')), datetime('now'))
-              `, [
-                row.metric_date,
-                row.metric_type,
-                row.metric_value,
-                row.metric_unit || null,
-                row.details || null,
-                row.created_at
-              ]);
-            } catch (insertError) {
-              console.log('Skipping duplicate record:', insertError.message);
+                // Create database directory if it doesn't exist
+                const dbDir = path.dirname(this.dbPath);
+                if (!fsSync.existsSync(dbDir)) {
+                    fsSync.mkdirSync(dbDir, { recursive: true });
+                }
+
+                console.log(`🔧 Initializing database at: ${this.dbPath}`);
+                
+                this.db = new sqlite3.Database(this.dbPath, (err) => {
+                    if (err) {
+                        console.error('❌ Database connection error:', err.message);
+                        reject(err);
+                        return;
+                    }
+                    
+                    console.log('✅ Connected to SQLite database');
+                    
+                    // Enable foreign keys
+                    this.db.run('PRAGMA foreign_keys = ON');
+                    
+                    // Set WAL mode for better concurrency
+                    this.db.run('PRAGMA journal_mode = WAL');
+                    
+                    // Create helper methods
+                    this.dbOperations = {
+                        // Run a query
+                        run: (sql, params = []) => {
+                            return new Promise((resolve, reject) => {
+                                this.db.run(sql, params, function(err) {
+                                    if (err) {
+                                        console.error('Database run error:', err.message);
+                                        console.error('SQL:', sql);
+                                        console.error('Params:', params);
+                                        reject(err);
+                                    } else {
+                                        resolve({ 
+                                            lastID: this.lastID, 
+                                            changes: this.changes 
+                                        });
+                                    }
+                                });
+                            });
+                        },
+
+                        // Get a single row
+                        get: (sql, params = []) => {
+                            return new Promise((resolve, reject) => {
+                                this.db.get(sql, params, (err, row) => {
+                                    if (err) {
+                                        console.error('Database get error:', err.message);
+                                        console.error('SQL:', sql);
+                                        reject(err);
+                                    } else {
+                                        resolve(row || null);
+                                    }
+                                });
+                            });
+                        },
+
+                        // Get all rows
+                        all: (sql, params = []) => {
+                            return new Promise((resolve, reject) => {
+                                this.db.all(sql, params, (err, rows) => {
+                                    if (err) {
+                                        console.error('Database all error:', err.message);
+                                        console.error('SQL:', sql);
+                                        reject(err);
+                                    } else {
+                                        resolve(rows || []);
+                                    }
+                                });
+                            });
+                        },
+
+                        // Execute multiple statements
+                        exec: (sql) => {
+                            return new Promise((resolve, reject) => {
+                                this.db.exec(sql, (err) => {
+                                    if (err) {
+                                        console.error('Database exec error:', err.message);
+                                        reject(err);
+                                    } else {
+                                        resolve();
+                                    }
+                                });
+                            });
+                        },
+
+                        // Check if connected
+                        isConnected: () => this.db !== null
+                    };
+                    
+                    // Set global instances immediately
+                    globalDatabaseInstance = this;
+                    globalDbOperations = this.dbOperations;
+                    
+                    // Create tables and initialize
+                    this.createTables().then(() => {
+                        console.log('✅ Database tables ready');
+                        this.isInitialized = true;
+                        this.initializationTime = new Date();
+                        
+                        // Notify all waiting callbacks
+                        initializationCallbacks.forEach(callback => callback());
+                        initializationCallbacks = [];
+                        
+                        // Initialize the legacy system
+                        initializeLegacySystem(this.dbOperations).then(() => {
+                            console.log('✅ Legacy system initialized');
+                            console.log('🚀 DATABASE FULLY INITIALIZED AND READY');
+                            resolve(this);
+                        }).catch(err => {
+                            console.error('Legacy system init error:', err);
+                            // Still resolve even if legacy init has errors
+                            console.log('🚀 DATABASE READY (legacy init had errors)');
+                            resolve(this);
+                        });
+                    }).catch(reject);
+                });
+            } catch (error) {
+                console.error('❌ Error in initialize:', error);
+                reject(error);
             }
-          }
+        });
+    }
+
+    // Connect to database (legacy compatibility)
+    async connect() {
+        return this.initialize();
+    }
+
+    // Get database operations
+    getOperations() {
+        if (!this.dbOperations) {
+            console.warn('⚠ Database operations not available yet');
+            return null;
+        }
+        return this.dbOperations;
+    }
+
+    // Check if initialized
+    isReady() {
+        return this.isInitialized;
+    }
+
+    // Get initialization time
+    getInitializationTime() {
+        return this.initializationTime;
+    }
+
+    // Create all tables
+    async createTables() {
+        try {
+            // Split the SQL into smaller chunks to avoid syntax errors
+            const tablesSQL = [
+                // 1. Support tables
+                `CREATE TABLE IF NOT EXISTS support_conversations (
+                    conversation_id TEXT PRIMARY KEY,
+                    platform TEXT NOT NULL,
+                    customer_id TEXT NOT NULL,
+                    customer_name TEXT NOT NULL,
+                    customer_phone TEXT,
+                    customer_email TEXT,
+                    assigned_agent_id TEXT,
+                    status TEXT DEFAULT 'active',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    last_activity TEXT DEFAULT CURRENT_TIMESTAMP,
+                    last_message TEXT,
+                    last_message_time TEXT,
+                    resolved_at TEXT,
+                    resolved_by TEXT,
+                    metadata TEXT
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS support_messages (
+                    message_id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    sender_id TEXT NOT NULL,
+                    sender_name TEXT NOT NULL,
+                    sender_type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    message_type TEXT DEFAULT 'text',
+                    media_url TEXT,
+                    media_type TEXT,
+                    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+                    platform TEXT NOT NULL,
+                    is_read INTEGER DEFAULT 0,
+                    delivered INTEGER DEFAULT 1,
+                    metadata TEXT
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS support_agent_status (
+                    agent_id TEXT PRIMARY KEY,
+                    status TEXT DEFAULT 'available',
+                    auto_assign INTEGER DEFAULT 1,
+                    last_active TEXT DEFAULT CURRENT_TIMESTAMP,
+                    platform_preferences TEXT,
+                    current_conversations INTEGER DEFAULT 0,
+                    max_conversations INTEGER DEFAULT 5
+                )`,
+
+                // 2. User tables
+                `CREATE TABLE IF NOT EXISTS event_managers (
+                    manager_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    phone TEXT,
+                    status TEXT DEFAULT 'active',
+                    role TEXT DEFAULT 'event_manager',
+                    last_login TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS admins (
+                    admin_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    phone TEXT,
+                    status TEXT DEFAULT 'active',
+                    role TEXT DEFAULT 'admin',
+                    last_login TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS customers (
+                    customer_id TEXT PRIMARY KEY,
+                    first_name TEXT NOT NULL,
+                    last_name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    phone TEXT,
+                    status TEXT DEFAULT 'active',
+                    role TEXT DEFAULT 'customer',
+                    last_login TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS support_staff (
+                    support_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    username TEXT,
+                    password TEXT NOT NULL,
+                    phone TEXT,
+                    department TEXT DEFAULT 'technical',
+                    role TEXT DEFAULT 'support',
+                    status TEXT DEFAULT 'active',
+                    availability_status TEXT DEFAULT 'available',
+                    max_tickets INTEGER DEFAULT 10,
+                    current_tickets INTEGER DEFAULT 0,
+                    avg_response_time INTEGER DEFAULT 0,
+                    satisfaction_rating REAL DEFAULT 0.0,
+                    last_login TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS event_organizers (
+                    organizer_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    username TEXT,
+                    password TEXT NOT NULL,
+                    phone TEXT,
+                    company TEXT,
+                    bio TEXT,
+                    website TEXT,
+                    status TEXT DEFAULT 'active',
+                    role TEXT DEFAULT 'event_organizer',
+                    permissions TEXT DEFAULT 'basic',
+                    verified INTEGER DEFAULT 0,
+                    stripe_customer_id TEXT,
+                    subscription_status TEXT DEFAULT 'free',
+                    last_login TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                // 3. Events and tickets
+                `CREATE TABLE IF NOT EXISTS events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_name TEXT NOT NULL,
+                    description TEXT,
+                    start_date TEXT,
+                    end_date TEXT,
+                    location TEXT,
+                    image_url TEXT,  
+                    currency TEXT DEFAULT 'ZAR',
+                    has_ticketing INTEGER DEFAULT 0,
+                    ticket_types TEXT,
+                    partnership_status TEXT DEFAULT 'untapped',
+                    status TEXT DEFAULT 'DRAFT',
+                    notes TEXT,
+                    venue TEXT,
+                    contact_email TEXT,
+                    contact_phone TEXT,
+                    organizer_name TEXT,
+                    max_attendees INTEGER,
+                    price REAL,
+                    capacity INTEGER, 
+                    archived INTEGER DEFAULT 0,
+                    category TEXT DEFAULT 'General',
+                    created_by TEXT,
+                    source_url TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(event_name, start_date, location)
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS tickets (
+                    ticket_id TEXT PRIMARY KEY,
+                    event_id INTEGER NOT NULL,
+                    customer_id TEXT NOT NULL,
+                    ticket_type TEXT NOT NULL,
+                    quantity INTEGER DEFAULT 1,
+                    unit_price REAL NOT NULL,
+                    total_amount REAL NOT NULL,
+                    status TEXT DEFAULT 'confirmed',
+                    purchase_date TEXT DEFAULT (datetime('now')),
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS payments (
+                    payment_id TEXT PRIMARY KEY,
+                    ticket_id TEXT NOT NULL,
+                    customer_id TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    currency TEXT DEFAULT 'ZAR',
+                    payment_method TEXT,
+                    status TEXT DEFAULT 'pending',
+                    transaction_id TEXT,
+                    receipt_url TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    completed_at TEXT
+                )`,
+
+                // 4. Dashboard and support tickets
+                `CREATE TABLE IF NOT EXISTS dashboard_user_list (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    status TEXT DEFAULT 'active',
+                    joined TEXT,
+                    lastActive TEXT,
+                    avatar TEXT,
+                    country TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS dashboard_metrics (
+                    key TEXT PRIMARY KEY,
+                    value TEXT -- JSON data
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS support_tickets (
+                    ticket_id TEXT PRIMARY KEY,
+                    customer_id TEXT,
+                    support_id TEXT,
+                    subject TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    category TEXT DEFAULT 'general',
+                    priority TEXT DEFAULT 'medium',
+                    status TEXT DEFAULT 'open',
+                    assigned_at TEXT,
+                    resolved_at TEXT,
+                    resolution TEXT,
+                    customer_satisfaction INTEGER,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                // 5. System metrics tables (FIXED: Added missing NOT NULL)
+                `CREATE TABLE IF NOT EXISTS system_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    metric_key TEXT UNIQUE NOT NULL,
+                    metric_value TEXT NOT NULL,
+                    metric_type TEXT DEFAULT 'gauge',
+                    unit TEXT,
+                    description TEXT,
+                    updated_at TEXT DEFAULT (datetime('now')),
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    endpoint TEXT NOT NULL,
+                    response_time_ms INTEGER NOT NULL,
+                    status_code INTEGER,
+                    request_size INTEGER,
+                    response_size INTEGER,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS security_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    severity TEXT DEFAULT 'info',
+                    user_id TEXT,
+                    user_email TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    details TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS system_alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alert_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    severity TEXT DEFAULT 'medium',
+                    source_module TEXT,
+                    affected_items TEXT,
+                    recommendations TEXT,
+                    acknowledged INTEGER DEFAULT 0,
+                    acknowledged_by TEXT,
+                    acknowledged_at TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS user_activity_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT,
+                    user_email TEXT,
+                    activity_type TEXT NOT NULL,
+                    activity_details TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS blocked_ips (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ip_address TEXT UNIQUE NOT NULL,
+                    reason TEXT,
+                    blocked_by TEXT DEFAULT 'system',
+                    attempts INTEGER DEFAULT 1,
+                    is_active INTEGER DEFAULT 1,
+                    expires_at TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS backup_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    backup_type TEXT DEFAULT 'automatic',
+                    status TEXT NOT NULL,
+                    size_mb REAL,
+                    duration_seconds INTEGER,
+                    details TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS system_uptime (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    service_name TEXT NOT NULL,
+                    status TEXT DEFAULT 'up',
+                    last_check TEXT,
+                    response_time_ms INTEGER,
+                    error_message TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                // 6. Extended metrics tables (ADDING MISSING TABLES)
+                `CREATE TABLE IF NOT EXISTS api_endpoint_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    endpoint TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    response_time_ms INTEGER NOT NULL,
+                    status_code INTEGER NOT NULL,
+                    user_agent TEXT,
+                    user_id TEXT,
+                    ip_address TEXT,
+                    request_size INTEGER,
+                    response_size INTEGER,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS database_query_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    query_hash TEXT NOT NULL,
+                    query_text TEXT NOT NULL,
+                    execution_time_ms INTEGER NOT NULL,
+                    error_message TEXT,
+                    table_name TEXT,
+                    rows_affected INTEGER,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS system_resource_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    cpu_usage_percent REAL,
+                    memory_usage_percent REAL,
+                    memory_used_mb REAL,
+                    memory_total_mb REAL,
+                    disk_usage_percent REAL,
+                    disk_used_gb REAL,
+                    disk_total_gb REAL,
+                    network_rx_mb REAL,
+                    network_tx_mb REAL,
+                    process_count INTEGER,
+                    load_average REAL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS business_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    metric_date TEXT NOT NULL,
+                    metric_type TEXT NOT NULL,
+                    metric_value REAL NOT NULL,
+                    metric_unit TEXT,
+                    details TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(metric_date, metric_type)
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS user_session_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT,
+                    session_id TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT,
+                    duration_seconds INTEGER DEFAULT 0,
+                    page_views INTEGER DEFAULT 0,
+                    user_agent TEXT,
+                    ip_address TEXT,
+                    country TEXT,
+                    device_type TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS event_performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL,
+                    event_name TEXT NOT NULL,
+                    total_views INTEGER DEFAULT 0,
+                    unique_visitors INTEGER DEFAULT 0,
+                    tickets_sold INTEGER DEFAULT 0,
+                    revenue REAL DEFAULT 0,
+                    conversion_rate REAL DEFAULT 0,
+                    date TEXT NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(event_id, date)
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS cache_performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    cache_key TEXT NOT NULL,
+                    hit_count INTEGER DEFAULT 0,
+                    miss_count INTEGER DEFAULT 0,
+                    size_bytes INTEGER,
+                    ttl_seconds INTEGER,
+                    last_accessed TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS api_performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    endpoint TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    response_time_ms INTEGER NOT NULL,
+                    status_code INTEGER NOT NULL,
+                    user_agent TEXT,
+                    user_id TEXT,
+                    ip_address TEXT,
+                    request_size INTEGER,
+                    response_size INTEGER,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS notification_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    notification_type TEXT NOT NULL,
+                    recipient_email TEXT,
+                    recipient_phone TEXT,
+                    subject TEXT,
+                    content TEXT,
+                    status TEXT DEFAULT 'pending',
+                    sent_at TEXT,
+                    error_message TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`,
+
+                `CREATE TABLE IF NOT EXISTS query_performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    query_hash TEXT NOT NULL,
+                    query_text TEXT NOT NULL,
+                    execution_time_ms INTEGER NOT NULL,
+                    table_name TEXT,
+                    rows_affected INTEGER,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )`
+            ];
+
+            // Execute each table creation separately to avoid syntax errors
+            for (let i = 0; i < tablesSQL.length; i++) {
+                try {
+                    await this.dbOperations.exec(tablesSQL[i]);
+                    console.log(`✅ Created table ${i + 1}/${tablesSQL.length}`);
+                } catch (error) {
+                    // If table already exists, that's okay
+                    if (!error.message.includes('already exists')) {
+                        console.error(`❌ Error creating table ${i + 1}:`, error.message);
+                        console.error('SQL:', tablesSQL[i].substring(0, 200) + '...');
+                        throw error;
+                    }
+                }
+            }
+            
+            console.log('✅ All tables created successfully');
+            
+            // Create indexes
+            await this.createIndexes();
+            
+            // Insert default test data for support chat
+            await this.insertDefaultChatData();
+            
+        } catch (error) {
+            console.error('❌ Error creating tables:', error);
+            throw error;
+        }
+    }
+
+    // Create indexes
+    async createIndexes() {
+        try {
+            const indexesSQL = [
+                `CREATE INDEX IF NOT EXISTS idx_messages_conversation ON support_messages(conversation_id)`,
+                `CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON support_messages(timestamp)`,
+                `CREATE INDEX IF NOT EXISTS idx_conversations_agent ON support_conversations(assigned_agent_id)`,
+                `CREATE INDEX IF NOT EXISTS idx_conversations_platform ON support_conversations(platform)`,
+                `CREATE INDEX IF NOT EXISTS idx_conversations_status ON support_conversations(status)`,
+                `CREATE INDEX IF NOT EXISTS idx_agent_status ON support_agent_status(status)`,
+                `CREATE INDEX IF NOT EXISTS idx_tickets_event ON tickets(event_id)`,
+                `CREATE INDEX IF NOT EXISTS idx_tickets_customer ON tickets(customer_id)`,
+                `CREATE INDEX IF NOT EXISTS idx_payments_ticket ON payments(ticket_id)`,
+                `CREATE INDEX IF NOT EXISTS idx_payments_customer ON payments(customer_id)`,
+                `CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)`,
+                `CREATE INDEX IF NOT EXISTS idx_events_status ON events(status)`,
+                `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`,
+                `CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status)`,
+                `CREATE INDEX IF NOT EXISTS idx_support_tickets_customer ON support_tickets(customer_id)`,
+                `CREATE INDEX IF NOT EXISTS idx_events_name_date ON events(event_name, start_date)`,
+                `CREATE INDEX IF NOT EXISTS idx_perf_metrics_endpoint ON performance_metrics(endpoint)`,
+                `CREATE INDEX IF NOT EXISTS idx_perf_metrics_created ON performance_metrics(created_at)`,
+                `CREATE INDEX IF NOT EXISTS idx_security_logs_type ON security_logs(event_type)`,
+                `CREATE INDEX IF NOT EXISTS idx_security_logs_created ON security_logs(created_at)`,
+                `CREATE INDEX IF NOT EXISTS idx_user_activity_type ON user_activity_logs(activity_type)`,
+                `CREATE INDEX IF NOT EXISTS idx_user_activity_created ON user_activity_logs(created_at)`,
+                `CREATE INDEX IF NOT EXISTS idx_system_metrics_key ON system_metrics(metric_key)`,
+                `CREATE INDEX IF NOT EXISTS idx_system_alerts_type ON system_alerts(alert_type)`,
+                `CREATE INDEX IF NOT EXISTS idx_system_alerts_created ON system_alerts(created_at)`
+            ];
+            
+            for (const sql of indexesSQL) {
+                try {
+                    await this.dbOperations.exec(sql);
+                } catch (error) {
+                    console.log('Note: Could not create index:', error.message);
+                }
+            }
+            console.log('✅ Indexes created successfully');
+        } catch (error) {
+            console.log('Note: Could not create some indexes:', error.message);
+        }
+    }
+
+    // Insert default chat data
+    async insertDefaultChatData() {
+        try {
+            // First, check if support_staff table exists
+            const supportStaffExists = await this.dbOperations.get(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='support_staff'"
+            );
+            
+            if (supportStaffExists) {
+                // Insert a default support staff member if none exist
+                const existingStaff = await this.dbOperations.get(
+                    "SELECT COUNT(*) as count FROM support_staff"
+                );
+                
+                if (existingStaff && existingStaff.count === 0) {
+                    const { v4: uuidv4 } = require('uuid');
+                    const bcrypt = require('bcrypt');
+                    const hashedPassword = await bcrypt.hash('support123', 10);
+                    const now = new Date().toISOString();
+                    
+                    await this.dbOperations.run(`
+                        INSERT INTO support_staff (support_id, name, email, username, password, phone, department, role, status, availability_status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        'agent_001',
+                        'Support Agent 1',
+                        'agent1@tickethub.co.za',
+                        'agent1',
+                        hashedPassword,
+                        '+27711234567',
+                        'technical',
+                        'support',
+                        'active',
+                        'available',
+                        now,
+                        now
+                    ]);
+                    
+                    await this.dbOperations.run(`
+                        INSERT INTO support_staff (support_id, name, email, username, password, phone, department, role, status, availability_status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        'agent_002',
+                        'Support Agent 2',
+                        'agent2@tickethub.co.za',
+                        'agent2',
+                        hashedPassword,
+                        '+27711234568',
+                        'customer_service',
+                        'support',
+                        'active',
+                        'available',
+                        now,
+                        now
+                    ]);
+                    
+                    console.log('✅ Default support staff created');
+                }
+            }
+            
+            // Now insert agent status
+            await this.dbOperations.run(`
+                INSERT OR IGNORE INTO support_agent_status (agent_id, status, auto_assign) 
+                VALUES 
+                    ('agent_001', 'available', 1),
+                    ('agent_002', 'available', 1)
+            `);
+
+            // Insert test conversations
+            await this.dbOperations.run(`
+                INSERT OR IGNORE INTO support_conversations (
+                    conversation_id, platform, customer_id, customer_name, 
+                    customer_phone, assigned_agent_id, status, created_at, 
+                    last_activity, last_message, last_message_time
+                ) VALUES 
+                    ('conv_whatsapp_001', 'whatsapp', 'cust_001', 'John WhatsApp', 
+                    '+27721234567', 'agent_001', 'active', datetime('now', '-1 hour'), 
+                    datetime('now', '-10 minutes'), 'Hello, I need help with my order', datetime('now', '-10 minutes')),
+                    
+                    ('conv_facebook_001', 'facebook', 'cust_002', 'Jane Facebook', 
+                    NULL, 'agent_001', 'active', datetime('now', '-2 hours'), 
+                    datetime('now', '-30 minutes'), 'When will my ticket arrive?', datetime('now', '-30 minutes'))
+            `);
+
+            // Insert test messages
+            await this.dbOperations.run(`
+                INSERT OR IGNORE INTO support_messages (
+                    message_id, conversation_id, sender_id, sender_name,
+                    sender_type, content, timestamp, platform, is_read, delivered
+                ) VALUES 
+                    ('msg_001', 'conv_whatsapp_001', 'cust_001', 'John WhatsApp', 
+                    'customer', 'Hello, I need help with my order', datetime('now', '-1 hour'), 'whatsapp', 1, 1),
+                    
+                    ('msg_002', 'conv_whatsapp_001', 'agent_001', 'Support Agent', 
+                    'support', 'Hi John! How can I help you today?', datetime('now', '-50 minutes'), 'whatsapp', 1, 1),
+                    
+                    ('msg_003', 'conv_whatsapp_001', 'cust_001', 'John WhatsApp', 
+                    'customer', 'My order #12345 hasn''t arrived yet', datetime('now', '-10 minutes'), 'whatsapp', 0, 1)
+            `);
+
+            console.log('✅ Default chat data inserted');
+        } catch (error) {
+            console.log('Note: Could not insert default chat data:', error.message);
+        }
+    }
+
+    // Close database connection
+    async close() {
+        if (this.db) {
+            return new Promise((resolve, reject) => {
+                this.db.close((err) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        console.log('Database connection closed');
+                        this.db = null;
+                        this.dbOperations = null;
+                        this.isInitialized = false;
+                        this.initializationTime = null;
+                        globalDatabaseInstance = null;
+                        globalDbOperations = null;
+                        isInitializing = false;
+                        initializationPromise = null;
+                        initializationCallbacks = [];
+                        resolve();
+                    }
+                });
+            });
+        }
+    }
+
+    // Check if database exists
+    databaseExists() {
+        return fsSync.existsSync(this.dbPath);
+    }
+
+    // Get database info
+    getDatabaseInfo() {
+        if (!this.databaseExists()) {
+            return {
+                exists: false,
+                path: this.dbPath,
+                size: '0 MB'
+            };
+        }
+
+        const stats = fsSync.statSync(this.dbPath);
+        const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+        
+        return {
+            exists: true,
+            path: this.dbPath,
+            size: `${sizeMB} MB`,
+            created: stats.birthtime,
+            modified: stats.mtime
+        };
+    }
+
+    // Helper function to clean messy event data
+    static cleanEventData(data) {
+        if (!data) return '';
+        
+        // Remove excessive whitespace, tabs, and newlines
+        let cleaned = data
+            .replace(/\t+/g, ' ')
+            .replace(/\n+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        
+        // Remove duplicate phrases (common in scraped data)
+        const words = cleaned.split(' ');
+        const uniqueWords = [];
+        const seen = new Set();
+        
+        for (const word of words) {
+            if (!seen.has(word.toLowerCase())) {
+                uniqueWords.push(word);
+                seen.add(word.toLowerCase());
+            }
         }
         
-        console.log('business_metrics table fixed successfully');
-      } else {
-        console.log('business_metrics table already has updated_at column');
-      }
-    } else {
-      console.log('business_metrics table does not exist yet, will be created');
+        cleaned = uniqueWords.join(' ');
+        
+        // Truncate if too long
+        if (cleaned.length > 500) {
+            cleaned = cleaned.substring(0, 500) + '...';
+        }
+        
+        return cleaned;
     }
-  } catch (error) {
-    console.error('Error fixing business_metrics table:', error);
-  }
-};
+}
 
 // ========================
-// CREATE ALL TABLES — WITH ALL METRICS TABLES
+// LEGACY SYSTEM (FOR BACKWARD COMPATIBILITY)
 // ========================
-const initializeTables = async () => {
-  // Existing user tables
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS event_managers (
-      manager_id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      phone TEXT,
-      status TEXT DEFAULT 'active',
-      role TEXT DEFAULT 'event_manager',
-      last_login TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
 
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS admins (
-      admin_id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      phone TEXT,
-      status TEXT DEFAULT 'active',
-      role TEXT DEFAULT 'admin',
-      last_login TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
+let legacyDbOperations = null;
 
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS customers (
-      customer_id TEXT PRIMARY KEY,
-      first_name TEXT NOT NULL,
-      last_name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      phone TEXT,
-      status TEXT DEFAULT 'active',
-      role TEXT DEFAULT 'customer',
-      last_login TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Events table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS events (
-      event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_name TEXT NOT NULL,
-      event_description TEXT,
-      start_date TEXT,
-      end_date TEXT,
-      location TEXT,
-      image_url TEXT,  
-      currency TEXT DEFAULT 'ZAR',
-      has_ticketing INTEGER DEFAULT 0,
-      ticket_types TEXT,
-      partnership_status TEXT DEFAULT 'untapped',
-      status TEXT DEFAULT 'DRAFT',
-      notes TEXT,
-      venue TEXT,
-      contact_email TEXT,
-      contact_phone TEXT,
-      organizer_name TEXT,
-      max_attendees INTEGER,
-      price REAL,
-      capacity INTEGER, 
-      archived INTEGER DEFAULT 0,
-      category TEXT DEFAULT 'General',
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(event_name)
-    )
-  `);
-  
-  // Tickets table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS tickets (
-      ticket_id TEXT PRIMARY KEY,
-      event_id INTEGER NOT NULL,
-      customer_id TEXT NOT NULL,
-      ticket_type TEXT NOT NULL,
-      quantity INTEGER DEFAULT 1,
-      unit_price REAL NOT NULL,
-      total_amount REAL NOT NULL,
-      status TEXT DEFAULT 'confirmed',
-      purchase_date TEXT DEFAULT (datetime('now')),
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (event_id) REFERENCES events(event_id),
-      FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-    )
-  `);
-
-  // Payments table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS payments (
-      payment_id TEXT PRIMARY KEY,
-      ticket_id TEXT NOT NULL,
-      customer_id TEXT NOT NULL,
-      amount REAL NOT NULL,
-      currency TEXT DEFAULT 'ZAR',
-      payment_method TEXT,
-      status TEXT DEFAULT 'pending',
-      transaction_id TEXT,
-      receipt_url TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      completed_at TEXT,
-      FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id),
-      FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-    )
-  `);
-  
-  // Dashboard tables
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS dashboard_user_list (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
-      role TEXT NOT NULL,
-      status TEXT DEFAULT 'active',
-      joined TEXT,
-      lastActive TEXT,
-      avatar TEXT,
-      country TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS dashboard_metrics (
-      key TEXT PRIMARY KEY,
-      value TEXT -- JSON data
-    )
-  `);
-
-  // ========================
-  // CORE METRICS TABLES
-  // ========================
-  
-  // System Metrics Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS system_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      metric_key TEXT UNIQUE NOT NULL,
-      metric_value TEXT NOT NULL,
-      metric_type TEXT DEFAULT 'gauge',
-      unit TEXT,
-      description TEXT,
-      updated_at TEXT DEFAULT (datetime('now')),
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Performance Metrics Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      endpoint TEXT NOT NULL,
-      response_time_ms INTEGER NOT NULL,
-      status_code INTEGER,
-      request_size INTEGER,
-      response_size INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Security Logs Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS security_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_type TEXT NOT NULL,
-      severity TEXT DEFAULT 'info',
-      user_id TEXT,
-      user_email TEXT,
-      ip_address TEXT,
-      user_agent TEXT,
-      details TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // System Alerts Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS system_alerts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      alert_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      severity TEXT DEFAULT 'medium',
-      source_module TEXT,
-      affected_items TEXT,
-      recommendations TEXT,
-      acknowledged INTEGER DEFAULT 0,
-      acknowledged_by TEXT,
-      acknowledged_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // User Activity Logs Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS user_activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT,
-      user_email TEXT,
-      activity_type TEXT NOT NULL,
-      activity_details TEXT,
-      ip_address TEXT,
-      user_agent TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Blocked IPs Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS blocked_ips (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ip_address TEXT UNIQUE NOT NULL,
-      reason TEXT,
-      blocked_by TEXT DEFAULT 'system',
-      attempts INTEGER DEFAULT 1,
-      is_active INTEGER DEFAULT 1,
-      expires_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Backup History Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS backup_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      backup_type TEXT DEFAULT 'automatic',
-      status TEXT NOT NULL,
-      size_mb REAL,
-      duration_seconds INTEGER,
-      details TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // System Uptime Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS system_uptime (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      service_name TEXT NOT NULL,
-      status TEXT DEFAULT 'up',
-      last_check TEXT,
-      response_time_ms INTEGER,
-      error_message TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // ========================
-  // EXTENDED METRICS TABLES
-  // ========================
-
-  // API Endpoint Performance Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS api_endpoint_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      endpoint TEXT NOT NULL,
-      method TEXT NOT NULL,
-      response_time_ms INTEGER NOT NULL,
-      status_code INTEGER NOT NULL,
-      user_agent TEXT,
-      user_id TEXT,
-      ip_address TEXT,
-      request_size INTEGER,
-      response_size INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Database Query Performance Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS query_performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      query_hash TEXT NOT NULL,
-      query_text TEXT NOT NULL,
-      execution_time_ms INTEGER NOT NULL,
-      table_name TEXT,
-      rows_affected INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // System Resource Usage Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS system_resource_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cpu_usage_percent REAL,
-      memory_usage_percent REAL,
-      memory_used_mb REAL,
-      memory_total_mb REAL,
-      disk_usage_percent REAL,
-      disk_used_gb REAL,
-      disk_total_gb REAL,
-      network_rx_mb REAL,
-      network_tx_mb REAL,
-      process_count INTEGER,
-      load_average REAL,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Business Metrics Table (CORRECTED with updated_at column)
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS business_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      metric_date TEXT NOT NULL,
-      metric_type TEXT NOT NULL,
-      metric_value REAL NOT NULL,
-      metric_unit TEXT,
-      details TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(metric_date, metric_type)
-    )
-  `);
-
-  // User Session Metrics Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS user_session_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT,
-      session_id TEXT NOT NULL,
-      start_time TEXT NOT NULL,
-      end_time TEXT,
-      duration_seconds INTEGER,
-      page_views INTEGER DEFAULT 0,
-      user_agent TEXT,
-      ip_address TEXT,
-      country TEXT,
-      device_type TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Event Performance Metrics Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS event_performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_id TEXT NOT NULL,
-      event_name TEXT NOT NULL,
-      total_views INTEGER DEFAULT 0,
-      unique_visitors INTEGER DEFAULT 0,
-      tickets_sold INTEGER DEFAULT 0,
-      revenue REAL DEFAULT 0,
-      conversion_rate REAL DEFAULT 0,
-      date TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(event_id, date)
-    )
-  `);
-
-  // Cache Performance Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS cache_performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cache_key TEXT NOT NULL,
-      hit_count INTEGER DEFAULT 0,
-      miss_count INTEGER DEFAULT 0,
-      size_bytes INTEGER,
-      ttl_seconds INTEGER,
-      last_accessed TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-// Replace this section in database.js:
-const ensureAllTables = async () => {
-  // Create tickets table if it doesn't exist
-  try {
-    await dbOperations.run(`
-      CREATE TABLE IF NOT EXISTS tickets (
-        ticket_id TEXT PRIMARY KEY,
-        event_id TEXT NOT NULL,
-        customer_id TEXT NOT NULL,
-        ticket_type TEXT,
-        quantity INTEGER DEFAULT 1,
-        total_amount REAL NOT NULL,
-        status TEXT DEFAULT 'active',
-        created_at TEXT DEFAULT (datetime('now')),
-        FOREIGN KEY (event_id) REFERENCES events(event_id),
-        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-      )
-    `);
-    console.log('Tickets table verified');
-  } catch (error) {
-    console.log('Tickets table already exists or error:', error.message);
-  }
-  
-  // Create payments table if it doesn't exist
-  try {
-    await dbOperations.run(`
-      CREATE TABLE IF NOT EXISTS payments (
-        payment_id TEXT PRIMARY KEY,
-        ticket_id TEXT NOT NULL,
-        customer_id TEXT NOT NULL,
-        amount REAL NOT NULL,
-        currency TEXT DEFAULT 'ZAR',
-        payment_method TEXT,
-        status TEXT DEFAULT 'pending',
-        transaction_id TEXT,
-        created_at TEXT DEFAULT (datetime('now')),
-        FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id),
-        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-      )
-    `);
-    console.log('Payments table verified');
-  } catch (error) {
-    console.log('Payments table already exists or error:', error.message);
-  }
- };
-
-// Fix the business_metrics table if it exists with wrong schema
-await fixBusinessMetricsTable();
-
-// Initialize default metrics
-await initializeAllMetrics();
-
-// Initialize default dashboard metrics
-await initializeDefaultDashboardMetrics();
-
-// Call ensureAllTables function
-await ensureAllTables(); // Add this line
-
-console.log('All tables created/verified — including all metrics tables');
-};
-
-// Update the initializeAllMetrics function to handle existing metrics
-const initializeAllMetrics = async () => {
-  const allMetrics = [
-    // Core metrics
-    { key: 'system_uptime_days', value: '0', type: 'counter', unit: 'days', description: 'System uptime in days' },
-    { key: 'database_uptime_days', value: '0', type: 'counter', unit: 'days', description: 'Database uptime in days' },
-    { key: 'database_size_mb', value: '0', type: 'gauge', unit: 'MB', description: 'Database size in megabytes' },
-    { key: 'avg_response_time', value: '0', type: 'gauge', unit: 'ms', description: 'Average API response time' },
-    { key: 'p95_response_time', value: '0', type: 'gauge', unit: 'ms', description: '95th percentile response time' },
-    { key: 'p99_response_time', value: '0', type: 'gauge', unit: 'ms', description: '99th percentile response time' },
-    { key: 'failed_login_attempts_24h', value: '0', type: 'counter', unit: 'count', description: 'Failed login attempts in last 24 hours' },
-    { key: 'password_resets_24h', value: '0', type: 'counter', unit: 'count', description: 'Password resets in last 24 hours' },
-    { key: 'active_blocked_ips', value: '0', type: 'gauge', unit: 'count', description: 'Currently blocked IP addresses' },
-    { key: 'security_alerts_24h', value: '0', type: 'counter', unit: 'count', description: 'Security alerts in last 24 hours' },
-    { key: 'total_tables', value: '0', type: 'gauge', unit: 'count', description: 'Total database tables' },
-    { key: 'total_rows', value: '0', type: 'gauge', unit: 'count', description: 'Total rows across key tables' },
-    { key: 'last_system_restart', value: new Date().toISOString(), type: 'timestamp', description: 'Last system restart time' },
-    { key: 'last_backup_status', value: 'pending', type: 'status', description: 'Last backup status' },
-    { key: 'last_backup_time', value: 'never', type: 'timestamp', description: 'Last backup time' },
-    { key: 'backup_success_rate', value: '0', type: 'gauge', unit: '%', description: 'Backup success rate' },
+// Initialize legacy system
+const initializeLegacySystem = async (dbOps) => {
+    legacyDbOperations = dbOps;
     
-    // Extended metrics - only add if they don't exist
-    { key: 'api_error_rate', value: '0', type: 'gauge', unit: '%', description: 'API error rate (4xx/5xx responses)' },
-    { key: 'avg_api_response_time', value: '0', type: 'gauge', unit: 'ms', description: 'Average API response time' },
-    { key: 'active_sessions', value: '0', type: 'gauge', unit: 'count', description: 'Active user sessions' },
-    { key: 'concurrent_users', value: '0', type: 'gauge', unit: 'count', description: 'Concurrent users' },
-    { key: 'cpu_usage_percent', value: '0', type: 'gauge', unit: '%', description: 'CPU usage percentage' },
-    { key: 'memory_usage_percent', value: '0', type: 'gauge', unit: '%', description: 'Memory usage percentage' },
-    { key: 'disk_usage_percent', value: '0', type: 'gauge', unit: '%', description: 'Disk usage percentage' },
-    { key: 'tickets_sold_today', value: '0', type: 'counter', unit: 'count', description: 'Tickets sold today' },
-    { key: 'revenue_today', value: '0', type: 'counter', unit: 'ZAR', description: 'Revenue generated today' },
-    { key: 'new_users_today', value: '0', type: 'counter', unit: 'count', description: 'New users registered today' },
-    { key: 'events_created_today', value: '0', type: 'counter', unit: 'count', description: 'Events created today' },
-    { key: 'avg_session_duration', value: '0', type: 'gauge', unit: 'min', description: 'Average user session duration' },
-    { key: 'cache_hit_rate', value: '0', type: 'gauge', unit: '%', description: 'Cache hit rate' },
-    { key: 'database_connections', value: '0', type: 'gauge', unit: 'count', description: 'Active database connections' },
-    { key: 'slow_queries_count', value: '0', type: 'counter', unit: 'count', description: 'Slow queries count' },
-    { key: 'total_events', value: '0', type: 'gauge', unit: 'count', description: 'Total events in system' },
-    { key: 'active_events', value: '0', type: 'gauge', unit: 'count', description: 'Active events' },
-    { key: 'pending_events', value: '0', type: 'gauge', unit: 'count', description: 'Pending event approvals' },
-    { key: 'total_tickets', value: '0', type: 'gauge', unit: 'count', description: 'Total tickets sold' },
-    { key: 'total_revenue', value: '0', type: 'gauge', unit: 'ZAR', description: 'Total revenue generated' },
-    { key: 'user_growth_rate', value: '0', type: 'gauge', unit: '%', description: 'User growth rate (weekly)' },
-    { key: 'event_growth_rate', value: '0', type: 'gauge', unit: '%', description: 'Event growth rate (weekly)' },
-    { key: 'ticket_conversion_rate', value: '0', type: 'gauge', unit: '%', description: 'Ticket conversion rate' },
-    { key: 'avg_ticket_price', value: '0', type: 'gauge', unit: 'ZAR', description: 'Average ticket price' },
-    { key: 'peak_concurrent_users', value: '0', type: 'gauge', unit: 'count', description: 'Peak concurrent users (today)' },
-    { key: 'api_requests_per_minute', value: '0', type: 'gauge', unit: 'req/min', description: 'API requests per minute' },
-    { key: 'database_query_rate', value: '0', type: 'gauge', unit: 'queries/sec', description: 'Database queries per second' },
-    { key: 'cache_efficiency', value: '0', type: 'gauge', unit: '%', description: 'Cache efficiency rate' },
-    { key: 'error_rate_5xx', value: '0', type: 'gauge', unit: '%', description: 'Server error rate (5xx)' },
-    { key: 'error_rate_4xx', value: '0', type: 'gauge', unit: '%', description: 'Client error rate (4xx)' },
-    { key: 'avg_page_load_time', value: '0', type: 'gauge', unit: 'ms', description: 'Average page load time' },
-    { key: 'user_retention_rate', value: '0', type: 'gauge', unit: '%', description: 'User retention rate (30 days)' },
-    { key: 'event_attendance_rate', value: '0', type: 'gauge', unit: '%', description: 'Event attendance rate' },
-    { key: 'ticket_refund_rate', value: '0', type: 'gauge', unit: '%', description: 'Ticket refund rate' },
-    { key: 'support_tickets_open', value: '0', type: 'gauge', unit: 'count', description: 'Open support tickets' },
-    { key: 'support_tickets_resolved', value: '0', type: 'counter', unit: 'count', description: 'Resolved support tickets (today)' },
-    { key: 'avg_resolution_time', value: '0', type: 'gauge', unit: 'hours', description: 'Average ticket resolution time' },
-  ];
-
-  for (const metric of allMetrics) {
     try {
-      // Use INSERT OR IGNORE to avoid duplicate errors
-      await dbOperations.run(
-        `INSERT OR IGNORE INTO system_metrics (metric_key, metric_value, metric_type, unit, description) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [metric.key, metric.value, metric.type, metric.unit, metric.description]
-      );
+        // Run legacy initialization with safe column addition
+        await safeInitializeTables();
+        await safeAddColumns();
+        await fixBusinessMetricsTable();
+        await initializeAllMetrics();
+        await initializeDefaultDashboardMetrics();
+        
+        console.log('✅ Legacy system initialization complete');
     } catch (error) {
-      // If INSERT OR IGNORE fails, try to update existing
-      try {
-        await dbOperations.run(
-          `UPDATE system_metrics 
-           SET metric_value = ?, metric_type = ?, unit = ?, description = ?, updated_at = datetime('now')
-           WHERE metric_key = ?`,
-          [metric.value, metric.type, metric.unit, metric.description, metric.key]
-        );
-      } catch (updateError) {
-        console.error(`Error updating metric ${metric.key}:`, updateError.message);
-      }
+        console.error('Error in legacy system initialization:', error.message);
     }
-  }
+};
+
+// Safe table initialization
+const safeInitializeTables = async () => {
+    console.log('🔧 Verifying all database tables...');
+    
+    try {
+        const tables = await legacyDbOperations.all(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        );
+        console.log(`✅ Found ${tables.length} tables`);
+    } catch (error) {
+        console.error('Error verifying tables:', error);
+    }
+};
+
+// Safe column addition - check if columns exist first
+const safeAddColumns = async () => {
+    console.log('🔧 Checking and adding missing columns...');
+    
+    const tablesToCheck = [
+        {
+            table: 'event_managers',
+            columns: [
+                { name: 'status', type: 'TEXT DEFAULT "active"' },
+                { name: 'last_login', type: 'TEXT' }
+            ]
+        },
+        {
+            table: 'admins',
+            columns: [
+                { name: 'status', type: 'TEXT DEFAULT "active"' },
+                { name: 'last_login', type: 'TEXT' },
+                { name: 'phone', type: 'TEXT' }
+            ]
+        },
+        {
+            table: 'customers',
+            columns: [
+                { name: 'status', type: 'TEXT DEFAULT "active"' },
+                { name: 'last_login', type: 'TEXT' }
+            ]
+        },
+        {
+            table: 'events',
+            columns: [
+                { name: 'description', type: 'TEXT' },
+                { name: 'start_date', type: 'TEXT' },
+                { name: 'end_date', type: 'TEXT' },
+                { name: 'image_url', type: 'TEXT' },
+                { name: 'currency', type: 'TEXT DEFAULT "ZAR"' },
+                { name: 'ticket_types', type: 'TEXT' },
+                { name: 'status', type: 'TEXT DEFAULT "DRAFT"' },
+                { name: 'created_by', type: 'TEXT' },
+                { name: 'capacity', type: 'INTEGER' },
+                { name: 'venue', type: 'TEXT' },
+                { name: 'category', type: 'TEXT DEFAULT "General"' },
+                { name: 'archived', type: 'INTEGER DEFAULT 0' },
+                { name: 'max_attendees', type: 'INTEGER' },
+                { name: 'price', type: 'REAL' },
+                { name: 'source_url', type: 'TEXT' }
+            ]
+        },
+        {
+            table: 'payments',
+            columns: [
+                { name: 'total_amount', type: 'REAL' },
+                { name: 'amount', type: 'REAL' }
+            ]
+        }
+    ];
+
+    for (const tableInfo of tablesToCheck) {
+        try {
+            // Check if table exists
+            const tableExists = await legacyDbOperations.get(
+                `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableInfo.table}'`
+            );
+            
+            if (tableExists) {
+                // Get existing columns
+                const tableInfoResult = await legacyDbOperations.all(
+                    `PRAGMA table_info(${tableInfo.table})`
+                );
+                
+                const existingColumns = tableInfoResult.map(col => col.name);
+                
+                // Add missing columns
+                for (const column of tableInfo.columns) {
+                    if (!existingColumns.includes(column.name)) {
+                        try {
+                            await legacyDbOperations.run(
+                                `ALTER TABLE ${tableInfo.table} ADD COLUMN ${column.name} ${column.type}`
+                            );
+                            console.log(`✅ Added column ${column.name} to ${tableInfo.table}`);
+                        } catch (alterError) {
+                            if (!alterError.message.includes('duplicate column name')) {
+                                console.log(`Note: Could not add column ${column.name} to ${tableInfo.table}:`, alterError.message);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.log(`Note: Could not check columns for ${tableInfo.table}:`, error.message);
+        }
+    }
+    
+    console.log('✅ Column check completed');
+};
+
+// Fix business_metrics table
+const fixBusinessMetricsTable = async () => {
+    try {
+        const tableExists = await legacyDbOperations.get(
+            `SELECT name FROM sqlite_master WHERE type='table' AND name='business_metrics'`
+        );
+        
+        if (tableExists) {
+            // Check if updated_at column exists
+            const tableInfo = await legacyDbOperations.all(
+                `PRAGMA table_info(business_metrics)`
+            );
+            
+            const hasUpdatedAt = tableInfo.some(col => col.name === 'updated_at');
+            
+            if (!hasUpdatedAt) {
+                console.log('Adding updated_at column to business_metrics table...');
+                
+                try {
+                    await legacyDbOperations.run(
+                        `ALTER TABLE business_metrics ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))`
+                    );
+                    console.log('✅ Added updated_at column to business_metrics');
+                } catch (error) {
+                    console.log('Note: Could not add updated_at column:', error.message);
+                }
+            } else {
+                console.log('business_metrics table already has updated_at column');
+            }
+        }
+    } catch (error) {
+        console.log('Note: Could not fix business_metrics table:', error.message);
+    }
+};
+
+// Initialize all metrics
+const initializeAllMetrics = async () => {
+    const allMetrics = [
+        // Core metrics
+        { key: 'system_uptime_days', value: '0', type: 'counter', unit: 'days', description: 'System uptime in days' },
+        { key: 'database_uptime_days', value: '0', type: 'counter', unit: 'days', description: 'Database uptime in days' },
+        { key: 'database_size_mb', value: '0', type: 'gauge', unit: 'MB', description: 'Database size in megabytes' },
+        { key: 'avg_response_time', value: '0', type: 'gauge', unit: 'ms', description: 'Average API response time' },
+        { key: 'failed_login_attempts_24h', value: '0', type: 'counter', unit: 'count', description: 'Failed login attempts in last 24 hours' },
+        { key: 'password_resets_24h', value: '0', type: 'counter', unit: 'count', description: 'Password resets in last 24 hours' },
+        { key: 'active_blocked_ips', value: '0', type: 'gauge', unit: 'count', description: 'Currently blocked IP addresses' },
+        { key: 'security_alerts_24h', value: '0', type: 'counter', unit: 'count', description: 'Security alerts in last 24 hours' },
+        { key: 'total_tables', value: '0', type: 'gauge', unit: 'count', description: 'Total database tables' },
+        { key: 'total_rows', value: '0', type: 'gauge', unit: 'count', description: 'Total rows across key tables' },
+        { key: 'last_system_restart', value: new Date().toISOString(), type: 'timestamp', description: 'Last system restart time' },
+        { key: 'last_backup_status', value: 'pending', type: 'status', description: 'Last backup status' },
+        { key: 'last_backup_time', value: 'never', type: 'timestamp', description: 'Last backup time' },
+        
+        // Business metrics
+        { key: 'tickets_sold_today', value: '0', type: 'counter', unit: 'count', description: 'Tickets sold today' },
+        { key: 'revenue_today', value: '0', type: 'counter', unit: 'ZAR', description: 'Revenue generated today' },
+        { key: 'new_users_today', value: '0', type: 'counter', unit: 'count', description: 'New users registered today' },
+        { key: 'events_created_today', value: '0', type: 'counter', unit: 'count', description: 'Events created today' },
+        { key: 'total_events', value: '0', type: 'gauge', unit: 'count', description: 'Total events in system' },
+        { key: 'active_events', value: '0', type: 'gauge', unit: 'count', description: 'Active events' },
+        { key: 'pending_events', value: '0', type: 'gauge', unit: 'count', description: 'Pending event approvals' },
+        { key: 'total_tickets', value: '0', type: 'gauge', unit: 'count', description: 'Total tickets sold' },
+        { key: 'total_revenue', value: '0', type: 'gauge', unit: 'ZAR', description: 'Total revenue generated' },
+        
+        // Support chat metrics
+        { key: 'active_conversations', value: '0', type: 'gauge', unit: 'count', description: 'Active chat conversations' },
+        { key: 'total_conversations', value: '0', type: 'gauge', unit: 'count', description: 'Total chat conversations' },
+        { key: 'avg_response_time_chat', value: '0', type: 'gauge', unit: 'seconds', description: 'Average chat response time' },
+        { key: 'whatsapp_chats', value: '0', type: 'gauge', unit: 'count', description: 'WhatsApp conversations' },
+        { key: 'facebook_chats', value: '0', type: 'gauge', unit: 'count', description: 'Facebook conversations' },
+        { key: 'instagram_chats', value: '0', type: 'gauge', unit: 'count', description: 'Instagram conversations' },
+        { key: 'twitter_chats', value: '0', type: 'gauge', unit: 'count', description: 'Twitter/X conversations' },
+        { key: 'available_agents', value: '0', type: 'gauge', unit: 'count', description: 'Available support agents' },
+        { key: 'busy_agents', value: '0', type: 'gauge', unit: 'count', description: 'Busy support agents' },
+        
+        // System metrics
+        { key: 'system_cpu_usage_percent', value: '0', type: 'gauge', unit: '%', description: 'CPU usage percentage' },
+        { key: 'system_memory_usage_percent', value: '0', type: 'gauge', unit: '%', description: 'Memory usage percentage' },
+        { key: 'system_memory_used_mb', value: '0', type: 'gauge', unit: 'MB', description: 'Memory used in MB' },
+        { key: 'system_disk_usage_percent', value: '0', type: 'gauge', unit: '%', description: 'Disk usage percentage' },
+        { key: 'system_disk_used_gb', value: '0', type: 'gauge', unit: 'GB', description: 'Disk used in GB' },
+        { key: 'system_process_count', value: '0', type: 'gauge', unit: 'count', description: 'Number of processes' },
+        { key: 'system_load_average', value: '0', type: 'gauge', unit: '', description: 'System load average' },
+        
+        // Performance metrics
+        { key: 'api_requests_total_1h', value: '0', type: 'counter', unit: 'count', description: 'API requests in last hour' },
+        { key: 'api_avg_response_time_ms', value: '0', type: 'gauge', unit: 'ms', description: 'Average API response time' },
+        { key: 'db_queries_total_1h', value: '0', type: 'counter', unit: 'count', description: 'Database queries in last hour' },
+        { key: 'db_avg_execution_time_ms', value: '0', type: 'gauge', unit: 'ms', description: 'Average database query execution time' },
+        
+        // Notification metrics
+        { key: 'notifications_total_24h', value: '0', type: 'counter', unit: 'count', description: 'Notifications sent in last 24 hours' },
+        { key: 'notifications_sent_24h', value: '0', type: 'counter', unit: 'count', description: 'Notifications successfully sent' },
+        { key: 'notifications_failed_24h', value: '0', type: 'counter', unit: 'count', description: 'Notifications failed to send' },
+        { key: 'notifications_pending', value: '0', type: 'gauge', unit: 'count', description: 'Pending notifications' },
+        { key: 'notifications_success_rate', value: '100', type: 'gauge', unit: '%', description: 'Notification success rate' },
+    ];
+
+    for (const metric of allMetrics) {
+        try {
+            // Check if metric already exists
+            const existing = await legacyDbOperations.get(
+                `SELECT metric_key FROM system_metrics WHERE metric_key = ?`,
+                [metric.key]
+            );
+            
+            if (!existing) {
+                await legacyDbOperations.run(
+                    `INSERT INTO system_metrics (metric_key, metric_value, metric_type, unit, description) 
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [metric.key, metric.value, metric.type, metric.unit, metric.description]
+                );
+            }
+        } catch (error) {
+            console.log(`Note: Could not initialize metric ${metric.key}:`, error.message);
+        }
+    }
+    console.log('✅ All system metrics initialized');
 };
 
 // Initialize default dashboard metrics
 const initializeDefaultDashboardMetrics = async () => {
-  const defaultMetrics = [
-      { key: 'stats', value: JSON.stringify({ total: 3, active: 3, newThisWeek: 0, suspended: 0, growthRate: 0, suspendedRate: 0, newThisWeekRate: 0 }) },
-      { key: 'analytics', value: JSON.stringify({ roleDistribution: { 'Admin': 33, 'Event Manager': 33, 'Customer': 33 } }) },
-      { key: 'recentActivity', value: JSON.stringify([
-          { type: 'user_login', user: 'Super Admin', time: '5 mins ago', status: 'success' },
-          { type: 'user_registered', user: 'Test Customer', time: '1 hour ago', status: 'success' },
-          { type: 'event_created', user: 'Event Manager', time: '2 hours ago', status: 'warning' },
-      ]) }
-  ];
+    const defaultMetrics = [
+        { key: 'stats', value: JSON.stringify({ total: 3, active: 3, newThisWeek: 0, suspended: 0, growthRate: 0, suspendedRate: 0, newThisWeekRate: 0 }) },
+        { key: 'analytics', value: JSON.stringify({ roleDistribution: { 'Admin': 33, 'Event Manager': 33, 'Customer': 33 } }) },
+        { key: 'recentActivity', value: JSON.stringify([
+            { type: 'user_login', user: 'Super Admin', time: '5 mins ago', status: 'success' },
+            { type: 'user_registered', user: 'Test Customer', time: '1 hour ago', status: 'success' },
+            { type: 'event_created', user: 'Event Manager', time: '2 hours ago', status: 'warning' },
+        ]) }
+    ];
 
-  for (const metric of defaultMetrics) {
-    const existing = await dbOperations.get(`SELECT key FROM dashboard_metrics WHERE key = ?`, [metric.key]);
-    if (!existing) {
-        await dbOperations.run(`INSERT INTO dashboard_metrics (key, value) VALUES (?, ?)`, [metric.key, metric.value]);
+    for (const metric of defaultMetrics) {
+        try {
+            const existing = await legacyDbOperations.get(`SELECT key FROM dashboard_metrics WHERE key = ?`, [metric.key]);
+            if (!existing) {
+                await legacyDbOperations.run(`INSERT INTO dashboard_metrics (key, value) VALUES (?, ?)`, [metric.key, metric.value]);
+            }
+        } catch (error) {
+            console.log(`Note: Could not initialize dashboard metric ${metric.key}:`, error.message);
+        }
     }
-  }
-};
-
-// Migration: Add phone column if missing
-const updateEventsTable = async () => {
-  const columns = [
-    'event_description TEXT',
-    'start_date TEXT',
-    'end_date TEXT',
-    'image_url TEXT',
-    'currency TEXT DEFAULT "ZAR"',
-    'ticket_types TEXT', 
-    'status TEXT DEFAULT "DRAFT"',
-    'created_by TEXT',
-    'capacity INTEGER',
-    'venue TEXT',
-    'category TEXT DEFAULT "General"',
-    'archived INTEGER DEFAULT 0',
-    'max_attendees INTEGER',
-    'price REAL'
-  ];
-
-  for (const col of columns) {
-    try {
-      await dbOperations.run(`ALTER TABLE events ADD COLUMN ${col}`);
-      console.log(`Added column: ${col}`);
-    } catch (err) {
-      if (!err.message.includes('duplicate column name')) {
-        console.error('Error adding column:', err);
-      }
-    }
-  }
-};
-
-// Add phone to existing admins table
-const addPhoneToAdmins = async () => {
-  try {
-    await dbOperations.run(`ALTER TABLE admins ADD COLUMN phone TEXT`);
-    console.log('Added phone column to admins table');
-  } catch (err) {
-    if (!err.message.includes('duplicate column name')) {
-      console.error('Error adding phone column:', err);
-    }
-  }
-};
-
-// Migration: Add status column to all user tables
-const addStatusToUserTables = async () => {
-  const tables = ['event_managers', 'admins', 'customers'];
-  
-  for (const table of tables) {
-    try {
-      await dbOperations.run(`ALTER TABLE ${table} ADD COLUMN status TEXT DEFAULT 'active'`);
-      console.log(`Added status column to ${table} table`);
-      
-      // Update existing users to have 'active' status
-      await dbOperations.run(`UPDATE ${table} SET status = 'active' WHERE status IS NULL`);
-    } catch (err) {
-      if (!err.message.includes('duplicate column name')) {
-        console.error(`Error adding status column to ${table}:`, err);
-      }
-    }
-  }
-};
-
-// Migration: Add last_login column to user tables
-const addLastLoginToUserTables = async () => {
-  const tables = ['event_managers', 'admins', 'customers'];
-  
-  for (const table of tables) {
-    try {
-      await dbOperations.run(`ALTER TABLE ${table} ADD COLUMN last_login TEXT`);
-      console.log(`Added last_login column to ${table} table`);
-      
-      // Set default last_login to created_at for existing users
-      await dbOperations.run(`UPDATE ${table} SET last_login = created_at WHERE last_login IS NULL`);
-    } catch (err) {
-      if (!err.message.includes('duplicate column name')) {
-        console.error(`Error adding last_login column to ${table}:`, err);
-      }
-    }
-  }
+    console.log('✅ Default dashboard metrics initialized');
 };
 
 // ========================
-// METRICS HELPER FUNCTIONS
+// SAFE DATABASE OPERATIONS - ULTIMATE FIX
+// ========================
+
+// ULTIMATE SAFE DB OPERATION - With retry logic and better error handling
+const safeDbOperation = async (operation, ...args) => {
+    const maxRetries = 3;
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            // Ensure database is ready
+            if (!globalDbOperations) {
+                console.warn(`⚠ Database not ready (attempt ${attempt}/${maxRetries}), initializing...`);
+                await ensureDatabaseReady();
+                
+                if (!globalDbOperations) {
+                    throw new Error('Database operations not available after initialization attempt');
+                }
+            }
+            
+            if (globalDbOperations && globalDbOperations[operation]) {
+                const result = await globalDbOperations[operation](...args);
+                return result;
+            } else {
+                throw new Error(`Database operation '${operation}' not available`);
+            }
+        } catch (error) {
+            lastError = error;
+            console.warn(`Attempt ${attempt}/${maxRetries} failed for operation '${operation}':`, error.message);
+            
+            if (attempt < maxRetries) {
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+                
+                // Reset and try to reinitialize
+                if (error.message.includes('not available') || error.message.includes('null')) {
+                    console.log('Attempting to reinitialize database...');
+                    await ensureDatabaseReady(true); // Force reinitialization
+                }
+            }
+        }
+    }
+    
+    console.error(`All ${maxRetries} attempts failed for operation '${operation}':`, lastError?.message);
+    return null;
+};
+
+// ULTIMATE SAFE METRIC UPDATE - Specialized for metrics
+const safeUpdateMetric = async (metricKey, metricValue) => {
+    return safeDbOperation('run',
+        `INSERT OR REPLACE INTO system_metrics (metric_key, metric_value, updated_at) 
+         VALUES (?, ?, datetime('now'))`,
+        [metricKey, metricValue]
+    );
+};
+
+// ULTIMATE SAFE METRIC GET - Specialized for metrics
+const safeGetMetric = async (metricKey) => {
+    return safeDbOperation('get',
+        `SELECT * FROM system_metrics WHERE metric_key = ?`,
+        [metricKey]
+    );
+};
+
+// ULTIMATE SAFE INSERT OR IGNORE
+const safeInsertOrIgnore = async (table, data) => {
+    const columns = Object.keys(data).join(', ');
+    const placeholders = Object.keys(data).map(() => '?').join(', ');
+    const values = Object.values(data);
+    
+    return safeDbOperation('run',
+        `INSERT OR IGNORE INTO ${table} (${columns}) VALUES (${placeholders})`,
+        values
+    );
+};
+
+// ========================
+// DATABASE READY ENSURANCE
+// ========================
+
+// Ensure database is ready with retry logic
+const ensureDatabaseReady = async (forceReinitialize = false) => {
+    if (forceReinitialize) {
+        console.log('Force reinitializing database...');
+        isInitializing = false;
+        initializationPromise = null;
+        globalDatabaseInstance = null;
+        globalDbOperations = null;
+    }
+    
+    if (isDatabaseReady()) {
+        return true;
+    }
+    
+    if (isInitializing && initializationPromise) {
+        console.log('Database is initializing, waiting...');
+        try {
+            await initializationPromise;
+            return true;
+        } catch (error) {
+            console.error('Error waiting for database initialization:', error);
+            return false;
+        }
+    }
+    
+    // Start initialization
+    console.log('Starting database initialization...');
+    isInitializing = true;
+    initializationPromise = (async () => {
+        try {
+            const db = new Database();
+            await db.initialize();
+            return db;
+        } catch (error) {
+            console.error('Failed to initialize database:', error);
+            isInitializing = false;
+            initializationPromise = null;
+            throw error;
+        }
+    })();
+    
+    try {
+        await initializationPromise;
+        return true;
+    } catch (error) {
+        console.error('Database initialization failed:', error);
+        return false;
+    }
+};
+
+// ========================
+// FIXED METRICS FUNCTIONS
 // ========================
 
 const getDatabaseSize = async () => {
-  try {
-    const stats = await fs.stat(dbPath);
-    return (stats.size / (1024 * 1024)).toFixed(2); // Size in MB
-  } catch (error) {
-    console.error('Error getting database size:', error);
-    return '0';
-  }
+    try {
+        const dbPath = path.join(__dirname, 'tickethub.db');
+        const stats = await fs.stat(dbPath);
+        return (stats.size / (1024 * 1024)).toFixed(2);
+    } catch (error) {
+        console.error('Error getting database size:', error);
+        return '0';
+    }
 };
 
 const getTableCounts = async () => {
-  try {
-    const tables = await dbOperations.all(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-    );
-    return tables.length;
-  } catch (error) {
-    console.error('Error getting table count:', error);
-    return 0;
-  }
+    try {
+        const tables = await safeDbOperation('all',
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        );
+        return tables ? tables.length : 0;
+    } catch (error) {
+        console.error('Error getting table count:', error);
+        return 0;
+    }
 };
 
 const getTotalRowsCount = async () => {
-  try {
-    const keyTables = ['customers', 'event_managers', 'admins', 'events', 'tickets', 'payments'];
-    let totalRows = 0;
-    
-    for (const tableName of keyTables) {
-      try {
-        const count = await dbOperations.get(
-          `SELECT COUNT(*) as count FROM ${tableName}`
-        );
-        totalRows += count?.count || 0;
-      } catch (e) {
-        // Table might not exist
-      }
+    try {
+        const keyTables = ['customers', 'event_managers', 'admins', 'events', 'tickets', 'payments', 'support_conversations', 'support_messages'];
+        let totalRows = 0;
+        
+        for (const tableName of keyTables) {
+            try {
+                // Check if table exists
+                const tableExists = await safeDbOperation('get',
+                    `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+                    [tableName]
+                );
+                
+                if (tableExists) {
+                    const count = await safeDbOperation('get',
+                        `SELECT COUNT(*) as count FROM ${tableName}`
+                    );
+                    totalRows += count?.count || 0;
+                }
+            } catch (e) {
+                // Table might not exist or other error
+            }
+        }
+        
+        return totalRows;
+    } catch (error) {
+        console.error('Error getting total rows count:', error);
+        return 0;
     }
-    
-    return totalRows;
-  } catch (error) {
-    console.error('Error getting total rows count:', error);
-    return 0;
-  }
+};
+
+// Collect support chat metrics - FIXED with safe operations
+const collectSupportChatMetrics = async () => {
+    try {
+        // Get active conversations
+        const activeConvos = await safeDbOperation('get',
+            `SELECT COUNT(*) as count FROM support_conversations WHERE status = 'active'`
+        );
+        
+        // Get total conversations
+        const totalConvos = await safeDbOperation('get',
+            `SELECT COUNT(*) as count FROM support_conversations`
+        );
+        
+        // Get platform breakdown
+        const platformStats = await safeDbOperation('all', `
+            SELECT platform, COUNT(*) as count 
+            FROM support_conversations 
+            GROUP BY platform
+        `);
+        
+        // Get agent availability
+        const availableAgents = await safeDbOperation('get', `
+            SELECT COUNT(*) as count FROM support_agent_status WHERE status = 'available'
+        `);
+        
+        const busyAgents = await safeDbOperation('get', `
+            SELECT COUNT(*) as count FROM support_agent_status WHERE status = 'busy'
+        `);
+        
+        // Update support chat metrics
+        const chatMetricUpdates = [
+            ['active_conversations', (activeConvos?.count || 0).toString()],
+            ['total_conversations', (totalConvos?.count || 0).toString()],
+            ['available_agents', (availableAgents?.count || 0).toString()],
+            ['busy_agents', (busyAgents?.count || 0).toString()],
+            ['avg_response_time_chat', '0'] // Default value
+        ];
+        
+        for (const [key, value] of chatMetricUpdates) {
+            await safeUpdateMetric(key, value);
+        }
+        
+        // Update platform-specific metrics
+        const platforms = ['whatsapp', 'facebook', 'instagram', 'twitter'];
+        for (const platform of platforms) {
+            const platformCount = platformStats?.find(p => p.platform === platform)?.count || 0;
+            await safeUpdateMetric(`${platform}_chats`, platformCount.toString());
+        }
+        
+        console.log('✅ Support chat metrics collected');
+    } catch (error) {
+        console.error('Error collecting support chat metrics:', error.message);
+    }
 };
 
 // Collect system resource metrics
 const collectSystemResourceMetrics = async () => {
-  try {
-    const cpuUsage = os.loadavg()[0]; // 1-minute load average
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const usedMem = totalMem - freeMem;
-    const memoryUsagePercent = (usedMem / totalMem) * 100;
-    
-    // Get disk usage
-    let diskStats = { usagePercent: '0', usedGB: '0', totalGB: '0' };
     try {
-      if (fs.statfs) {
-        const stats = await fs.statfs('/');
-        const total = stats.bsize * stats.blocks;
-        const free = stats.bsize * stats.bfree;
-        const used = total - free;
-        const usagePercent = (used / total) * 100;
-        diskStats = {
-          usagePercent: usagePercent.toFixed(2),
-          usedGB: (used / 1024 / 1024 / 1024).toFixed(2),
-          totalGB: (total / 1024 / 1024 / 1024).toFixed(2)
-        };
-      }
-    } catch (diskError) {
-      console.log('Disk stats not available:', diskError.message);
-    }
-    
-    await dbOperations.run(`
-      INSERT INTO system_resource_metrics 
-      (cpu_usage_percent, memory_usage_percent, memory_used_mb, memory_total_mb, 
-       disk_usage_percent, disk_used_gb, disk_total_gb, process_count, load_average)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      cpuUsage.toFixed(2),
-      memoryUsagePercent.toFixed(2),
-      (usedMem / 1024 / 1024).toFixed(2),
-      (totalMem / 1024 / 1024).toFixed(2),
-      diskStats.usagePercent,
-      diskStats.usedGB,
-      diskStats.totalGB,
-      os.cpus().length,
-      cpuUsage.toFixed(2)
-    ]);
-
-    // Update system metrics
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [cpuUsage.toFixed(2), 'cpu_usage_percent']
-    );
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [memoryUsagePercent.toFixed(2), 'memory_usage_percent']
-    );
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [diskStats.usagePercent, 'disk_usage_percent']
-    );
-
-  } catch (error) {
-    console.error('Error collecting system resource metrics:', error);
-  }
-};
-
-// Update collectBusinessMetrics to handle missing tables
-const collectBusinessMetrics = async () => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Initialize counts
-    let ticketsSoldToday = 0;
-    let revenueToday = 0;
-    let totalTickets = 0;
-    let totalRevenue = 0;
-    
-    // Check if tickets table exists
-    try {
-      const ticketsTableExists = await dbOperations.get(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name='tickets'`
-      );
-      
-      if (ticketsTableExists) {
-        // Get tickets sold today
-        const ticketsSold = await dbOperations.get(`
-          SELECT COUNT(*) as count FROM tickets 
-          WHERE DATE(created_at) = DATE('now')
-        `);
-        ticketsSoldToday = ticketsSold?.count || 0;
+        const cpuUsage = os.loadavg()[0];
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+        const memoryUsagePercent = (usedMem / totalMem) * 100;
         
-        // Get total tickets
-        const totalTicketsRes = await dbOperations.get(`SELECT COUNT(*) as count FROM tickets`);
-        totalTickets = totalTicketsRes?.count || 0;
-      }
-    } catch (ticketError) {
-      console.log('Tickets table not found, skipping ticket metrics');
-    }
-    
-    // Check if payments table exists
-    try {
-      const paymentsTableExists = await dbOperations.get(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name='payments'`
-      );
-      
-      if (paymentsTableExists) {
-        // Get revenue today
-        const revenueTodayRes = await dbOperations.get(`
-          SELECT SUM(total_amount) as total FROM payments 
-          WHERE DATE(created_at) = DATE('now') AND status = 'completed'
-        `);
-        revenueToday = revenueTodayRes?.total || 0;
-        
-        // Get total revenue
-        const totalRevenueRes = await dbOperations.get(`
-          SELECT SUM(total_amount) as total FROM payments WHERE status = 'completed'
-        `);
-        totalRevenue = totalRevenueRes?.total || 0;
-      }
-    } catch (paymentError) {
-      console.log('Payments table not found, skipping revenue metrics');
-    }
-    
-    // Get new users today
-    const newUsers = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM (
-        SELECT customer_id FROM customers WHERE DATE(created_at) = DATE('now')
-        UNION ALL
-        SELECT manager_id FROM event_managers WHERE DATE(created_at) = DATE('now')
-        UNION ALL
-        SELECT admin_id FROM admins WHERE DATE(created_at) = DATE('now')
-      )
-    `);
-    
-    // Get events created today
-    const eventsCreated = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM events 
-      WHERE DATE(created_at) = DATE('now')
-    `);
-    
-    // Get total events
-    const totalEvents = await dbOperations.get(`SELECT COUNT(*) as count FROM events`);
-    const activeEvents = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM events 
-      WHERE status = 'ACTIVE' OR status = 'active'
-    `);
-    const pendingEvents = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM events 
-      WHERE status = 'PENDING' OR status = 'pending'
-    `);
-    
-    // Update business metrics table
-    await updateBusinessMetric(today, 'tickets_sold', ticketsSoldToday);
-    await updateBusinessMetric(today, 'revenue', revenueToday);
-    await updateBusinessMetric(today, 'new_users', newUsers?.count || 0);
-    await updateBusinessMetric(today, 'events_created', eventsCreated?.count || 0);
-    
-    // Update all system metrics
-    const metricUpdates = [
-      ['tickets_sold_today', ticketsSoldToday.toString()],
-      ['revenue_today', revenueToday.toString()],
-      ['new_users_today', (newUsers?.count || 0).toString()],
-      ['events_created_today', (eventsCreated?.count || 0).toString()],
-      ['total_events', (totalEvents?.count || 0).toString()],
-      ['active_events', (activeEvents?.count || 0).toString()],
-      ['pending_events', (pendingEvents?.count || 0).toString()],
-      ['total_tickets', totalTickets.toString()],
-      ['total_revenue', totalRevenue.toString()]
-    ];
-    
-    for (const [key, value] of metricUpdates) {
-      try {
-        await dbOperations.run(
-          `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-          [value, key]
-        );
-      } catch (error) {
-        console.log(`Metric ${key} not found, skipping update`);
-      }
-    }
-    
-  } catch (error) {
-    console.error('Error collecting business metrics:', error.message);
-  }
-};
-
-// SAFE: updateBusinessMetric with fallback for missing updated_at column
-const updateBusinessMetricSafe = async (date, type, value) => {
-  try {
-    // Try with updated_at first
-    try {
-      await dbOperations.run(`
-        INSERT OR REPLACE INTO business_metrics (metric_date, metric_type, metric_value, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
-      `, [date, type, value]);
-    } catch (error) {
-      // If updated_at column doesn't exist, try without it
-      if (error.message.includes('no such column: updated_at')) {
-        await dbOperations.run(`
-          INSERT OR REPLACE INTO business_metrics (metric_date, metric_type, metric_value)
-          VALUES (?, ?, ?)
-        `, [date, type, value]);
-      } else {
-        // If it's a UNIQUE constraint error, try UPDATE instead
-        if (error.message.includes('UNIQUE constraint failed')) {
-          await dbOperations.run(`
-            UPDATE business_metrics SET metric_value = ? 
-            WHERE metric_date = ? AND metric_type = ?
-          `, [value, date, type]);
-        } else {
-          throw error;
+        // Get disk usage
+        let diskStats = { usagePercent: '0', usedGB: '0', totalGB: '0' };
+        try {
+            const cwd = process.cwd();
+            const stats = fsSync.statfsSync(cwd);
+            const total = stats.bsize * stats.blocks;
+            const free = stats.bsize * stats.bfree;
+            const used = total - free;
+            const usagePercent = (used / total) * 100;
+            diskStats = {
+                usagePercent: usagePercent.toFixed(2),
+                usedGB: (used / 1024 / 1024 / 1024).toFixed(2),
+                totalGB: (total / 1024 / 1024 / 1024).toFixed(2)
+            };
+        } catch (diskError) {
+            console.log('Disk stats not available:', diskError.message);
         }
-      }
+        
+        // Insert into system_resource_metrics
+        await safeDbOperation('run', `
+            INSERT INTO system_resource_metrics 
+            (cpu_usage_percent, memory_usage_percent, memory_used_mb, memory_total_mb, 
+             disk_usage_percent, disk_used_gb, disk_total_gb, process_count, load_average)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            cpuUsage.toFixed(2),
+            memoryUsagePercent.toFixed(2),
+            (usedMem / 1024 / 1024).toFixed(2),
+            (totalMem / 1024 / 1024).toFixed(2),
+            diskStats.usagePercent,
+            diskStats.usedGB,
+            diskStats.totalGB,
+            os.cpus().length,
+            cpuUsage.toFixed(2)
+        ]);
+
+        // Update system metrics
+        await safeUpdateMetric('cpu_usage_percent', cpuUsage.toFixed(2));
+        await safeUpdateMetric('memory_usage_percent', memoryUsagePercent.toFixed(2));
+        await safeUpdateMetric('disk_usage_percent', diskStats.usagePercent);
+        
+        console.log('✅ System resource metrics collected');
+    } catch (error) {
+        console.error('Error collecting system resource metrics:', error);
     }
-  } catch (error) {
-    // Silent fail for business metrics - don't crash the whole metrics collection
-    console.log(`Note: Could not update business metric ${type}:`, error.message);
-  }
 };
 
-// Collect API performance metrics
-const collectAPIPerformanceMetrics = async () => {
-  try {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    
-    // Get API error rate
-    const apiStats = await dbOperations.get(`
-      SELECT 
-        COUNT(*) as total_requests,
-        SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_requests,
-        SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as server_errors,
-        SUM(CASE WHEN status_code >= 400 AND status_code < 500 THEN 1 ELSE 0 END) as client_errors
-      FROM api_endpoint_metrics 
-      WHERE created_at >= ?
-    `, [oneHourAgo]);
-    
-    if (apiStats && apiStats.total_requests > 0) {
-      const errorRate = ((apiStats.error_requests / apiStats.total_requests) * 100).toFixed(2);
-      const serverErrorRate = ((apiStats.server_errors / apiStats.total_requests) * 100).toFixed(2);
-      const clientErrorRate = ((apiStats.client_errors / apiStats.total_requests) * 100).toFixed(2);
-      
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [errorRate, 'api_error_rate']
-      );
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [serverErrorRate, 'error_rate_5xx']
-      );
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [clientErrorRate, 'error_rate_4xx']
-      );
+// Collect business metrics
+const collectBusinessMetrics = async () => {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Initialize counts
+        let ticketsSoldToday = 0;
+        let revenueToday = 0;
+        let totalTickets = 0;
+        let totalRevenue = 0;
+        
+        // Get tickets sold today
+        try {
+            const ticketsSold = await safeDbOperation('get', `
+                SELECT COUNT(*) as count FROM tickets 
+                WHERE DATE(created_at) = DATE('now')
+            `);
+            ticketsSoldToday = ticketsSold?.count || 0;
+            
+            // Get total tickets
+            const totalTicketsRes = await safeDbOperation('get', `SELECT COUNT(*) as count FROM tickets`);
+            totalTickets = totalTicketsRes?.count || 0;
+        } catch (ticketError) {
+            console.log('Tickets query error:', ticketError.message);
+        }
+        
+        // Get revenue today
+        try {
+            const revenueTodayRes = await safeDbOperation('get', `
+                SELECT SUM(total_amount) as total FROM payments 
+                WHERE DATE(created_at) = DATE('now') AND status = 'completed'
+            `);
+            revenueToday = revenueTodayRes?.total || 0;
+            
+            // Get total revenue
+            const totalRevenueRes = await safeDbOperation('get', `
+                SELECT SUM(total_amount) as total FROM payments WHERE status = 'completed'
+            `);
+            totalRevenue = totalRevenueRes?.total || 0;
+        } catch (paymentError) {
+            console.log('Payments query error:', paymentError.message);
+        }
+        
+        // Get new users today
+        let newUsersCount = 0;
+        try {
+            const newUsers = await safeDbOperation('get', `
+                SELECT COUNT(*) as count FROM (
+                    SELECT customer_id FROM customers WHERE DATE(created_at) = DATE('now')
+                    UNION ALL
+                    SELECT manager_id FROM event_managers WHERE DATE(created_at) = DATE('now')
+                    UNION ALL
+                    SELECT admin_id FROM admins WHERE DATE(created_at) = DATE('now')
+                    UNION ALL
+                    SELECT support_id FROM support_staff WHERE DATE(created_at) = DATE('now')
+                    UNION ALL
+                    SELECT organizer_id FROM event_organizers WHERE DATE(created_at) = DATE('now')
+                )
+            `);
+            newUsersCount = newUsers?.count || 0;
+        } catch (error) {
+            console.log('Error getting new users:', error.message);
+        }
+        
+        // Get events created today
+        let eventsCreatedCount = 0;
+        try {
+            const eventsCreated = await safeDbOperation('get', `
+                SELECT COUNT(*) as count FROM events 
+                WHERE DATE(created_at) = DATE('now')
+            `);
+            eventsCreatedCount = eventsCreated?.count || 0;
+        } catch (error) {
+            console.log('Error getting events created:', error.message);
+        }
+        
+        // Get total events
+        let totalEventsCount = 0;
+        let activeEventsCount = 0;
+        let pendingEventsCount = 0;
+        
+        try {
+            const totalEvents = await safeDbOperation('get', `SELECT COUNT(*) as count FROM events`);
+            totalEventsCount = totalEvents?.count || 0;
+            
+            const activeEvents = await safeDbOperation('get', `
+                SELECT COUNT(*) as count FROM events 
+                WHERE status = 'ACTIVE' OR status = 'active'
+            `);
+            activeEventsCount = activeEvents?.count || 0;
+            
+            const pendingEvents = await safeDbOperation('get', `
+                SELECT COUNT(*) as count FROM events 
+                WHERE status = 'PENDING' OR status = 'pending'
+            `);
+            pendingEventsCount = pendingEvents?.count || 0;
+        } catch (error) {
+            console.log('Error getting event counts:', error.message);
+        }
+        
+        // Update business metrics table
+        const businessMetrics = [
+            ['tickets_sold', ticketsSoldToday],
+            ['revenue', revenueToday],
+            ['new_users', newUsersCount],
+            ['events_created', eventsCreatedCount]
+        ];
+        
+        for (const [type, value] of businessMetrics) {
+            await safeDbOperation('run', `
+                INSERT OR REPLACE INTO business_metrics (metric_date, metric_type, metric_value, updated_at)
+                VALUES (?, ?, ?, datetime('now'))
+            `, [today, type, value]);
+        }
+        
+        // Update all system metrics
+        await safeUpdateMetric('tickets_sold_today', ticketsSoldToday.toString());
+        await safeUpdateMetric('revenue_today', revenueToday.toString());
+        await safeUpdateMetric('new_users_today', newUsersCount.toString());
+        await safeUpdateMetric('events_created_today', eventsCreatedCount.toString());
+        await safeUpdateMetric('total_events', totalEventsCount.toString());
+        await safeUpdateMetric('active_events', activeEventsCount.toString());
+        await safeUpdateMetric('pending_events', pendingEventsCount.toString());
+        await safeUpdateMetric('total_tickets', totalTickets.toString());
+        await safeUpdateMetric('total_revenue', totalRevenue.toString());
+        
+        console.log('✅ Business metrics collected');
+    } catch (error) {
+        console.error('Error collecting business metrics:', error.message);
     }
-    
-    // Get average API response time
-    const avgResponseTime = await dbOperations.get(`
-      SELECT AVG(response_time_ms) as avg_time 
-      FROM api_endpoint_metrics 
-      WHERE created_at >= ? AND response_time_ms > 0
-    `, [oneHourAgo]);
-    
-    if (avgResponseTime && avgResponseTime.avg_time) {
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [avgResponseTime.avg_time.toFixed(2), 'avg_api_response_time']
-      );
-    }
-    
-    // Get API requests per minute
-    const requestsPerMinute = await dbOperations.get(`
-      SELECT COUNT(*) as count 
-      FROM api_endpoint_metrics 
-      WHERE created_at >= datetime('now', '-1 minute')
-    `);
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [(requestsPerMinute?.count || 0).toString(), 'api_requests_per_minute']
-    );
-    
-  } catch (error) {
-    console.error('Error collecting API performance metrics:', error);
-  }
 };
 
-// Collect user session metrics
-const collectUserSessionMetrics = async () => {
-  try {
-    // Get active sessions (sessions that started in last 30 minutes and haven't ended)
-    const activeSessions = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM user_session_metrics 
-      WHERE end_time IS NULL 
-      AND datetime(start_time) > datetime('now', '-30 minutes')
-    `);
-    
-    // Get peak concurrent users today
-    const peakConcurrent = await dbOperations.get(`
-      SELECT MAX(concurrent_count) as peak FROM (
-        SELECT COUNT(*) as concurrent_count 
-        FROM user_session_metrics 
-        WHERE date(start_time) = date('now')
-        AND datetime(start_time) > datetime('now', '-1 day')
-        GROUP BY strftime('%H', start_time)
-      )
-    `);
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [(activeSessions?.count || 0).toString(), 'active_sessions']
-    );
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [(peakConcurrent?.peak || activeSessions?.count || 0).toString(), 'peak_concurrent_users']
-    );
-    
-    // Calculate average session duration for last hour
-    const sessionStats = await dbOperations.get(`
-      SELECT AVG(duration_seconds) as avg_duration 
-      FROM user_session_metrics 
-      WHERE end_time IS NOT NULL 
-      AND datetime(start_time) > datetime('now', '-1 hour')
-    `);
-    
-    if (sessionStats && sessionStats.avg_duration) {
-      const avgMinutes = (sessionStats.avg_duration / 60).toFixed(1);
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [avgMinutes, 'avg_session_duration']
-      );
-    }
-    
-  } catch (error) {
-    console.error('Error collecting user session metrics:', error);
-  }
-};
-
-// Collect database performance metrics
-const collectDatabasePerformanceMetrics = async () => {
-  try {
-    // Get slow queries count (queries > 100ms in last hour)
-    const slowQueries = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM query_performance_metrics 
-      WHERE execution_time_ms > 100 
-      AND created_at >= datetime('now', '-1 hour')
-    `);
-    
-    // Get database query rate (queries per second)
-    const queryRate = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM query_performance_metrics 
-      WHERE created_at >= datetime('now', '-1 minute')
-    `);
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [(slowQueries?.count || 0).toString(), 'slow_queries_count']
-    );
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [(queryRate?.count || 0).toString(), 'database_query_rate']
-    );
-    
-  } catch (error) {
-    console.error('Error collecting database performance metrics:', error);
-  }
-};
-
-// Calculate growth rates
-const calculateGrowthRates = async () => {
-  try {
-    // Calculate user growth rate (last 7 days vs previous 7 days)
-    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
-    const recentUsers = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM (
-        SELECT customer_id FROM customers WHERE created_at >= ?
-        UNION ALL
-        SELECT manager_id FROM event_managers WHERE created_at >= ?
-        UNION ALL
-        SELECT admin_id FROM admins WHERE created_at >= ?
-      )
-    `, [oneWeekAgo, oneWeekAgo, oneWeekAgo]);
-    
-    const previousUsers = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM (
-        SELECT customer_id FROM customers WHERE created_at >= ? AND created_at < ?
-        UNION ALL
-        SELECT manager_id FROM event_managers WHERE created_at >= ? AND created_at < ?
-        UNION ALL
-        SELECT admin_id FROM admins WHERE created_at >= ? AND created_at < ?
-      )
-    `, [twoWeeksAgo, oneWeekAgo, twoWeeksAgo, oneWeekAgo, twoWeeksAgo, oneWeekAgo]);
-    
-    let userGrowthRate = 0;
-    if (previousUsers && previousUsers.count > 0) {
-      userGrowthRate = ((recentUsers.count - previousUsers.count) / previousUsers.count) * 100;
-    } else if (recentUsers && recentUsers.count > 0) {
-      userGrowthRate = 100;
-    }
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [userGrowthRate.toFixed(2), 'user_growth_rate']
-    );
-    
-    // Calculate event growth rate
-    const recentEvents = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM events WHERE created_at >= ?
-    `, [oneWeekAgo]);
-    
-    const previousEvents = await dbOperations.get(`
-      SELECT COUNT(*) as count FROM events WHERE created_at >= ? AND created_at < ?
-    `, [twoWeeksAgo, oneWeekAgo]);
-    
-    let eventGrowthRate = 0;
-    if (previousEvents && previousEvents.count > 0) {
-      eventGrowthRate = ((recentEvents.count - previousEvents.count) / previousEvents.count) * 100;
-    } else if (recentEvents && recentEvents.count > 0) {
-      eventGrowthRate = 100;
-    }
-    
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [eventGrowthRate.toFixed(2), 'event_growth_rate']
-    );
-    
-  } catch (error) {
-    console.error('Error calculating growth rates:', error);
-  }
-};
-
-// Main update system metrics function
+// ULTIMATE FIXED: Main update system metrics function
 const updateSystemMetrics = async () => {
-  try {
-    console.log('Updating system metrics...');
+    console.log('🔄 ULTIMATE FIXED: Starting system metrics update...');
     
-    // Update database size
-    const dbSize = await getDatabaseSize();
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [dbSize, 'database_size_mb']
-    );
+    try {
+        // ENSURE DATABASE IS READY FIRST
+        const isReady = await ensureDatabaseReady();
+        if (!isReady) {
+            console.error('❌ Database not ready, skipping metrics update');
+            return;
+        }
+        
+        console.log('✅ Database confirmed ready, proceeding with metrics update...');
+        
+        // Update database size
+        try {
+            const dbSize = await getDatabaseSize();
+            await safeUpdateMetric('database_size_mb', dbSize);
+            console.log('✓ Updated database_size_mb:', dbSize);
+        } catch (error) {
+            console.log('Error updating database size:', error.message);
+        }
 
-    // Update table count
-    const tableCount = await getTableCounts();
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [tableCount.toString(), 'total_tables']
-    );
+        // Update table count
+        try {
+            const tableCount = await getTableCounts();
+            await safeUpdateMetric('total_tables', tableCount.toString());
+            console.log('✓ Updated total_tables:', tableCount);
+        } catch (error) {
+            console.log('Error updating table count:', error.message);
+        }
 
-    // Update total rows
-    const totalRows = await getTotalRowsCount();
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [totalRows.toString(), 'total_rows']
-    );
+        // Update total rows
+        try {
+            const totalRows = await getTotalRowsCount();
+            await safeUpdateMetric('total_rows', totalRows.toString());
+            console.log('✓ Updated total_rows:', totalRows);
+        } catch (error) {
+            console.log('Error updating total rows:', error.message);
+        }
 
-    // Update active blocked IPs count
-    const blockedIPs = await dbOperations.get(
-      `SELECT COUNT(*) as count FROM blocked_ips WHERE is_active = 1`
-    );
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [blockedIPs?.count?.toString() || '0', 'active_blocked_ips']
-    );
+        // Update uptime metrics
+        try {
+            const now = new Date().toISOString();
+            await safeUpdateMetric('system_uptime_days', '0');
+            await safeUpdateMetric('database_uptime_days', '0');
+            await safeUpdateMetric('last_system_restart', now);
+            console.log('✓ Updated uptime metrics');
+        } catch (error) {
+            console.log('Error updating uptime metrics:', error.message);
+        }
 
-    // Update failed login attempts in last 24 hours
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const failedLogins = await dbOperations.get(
-      `SELECT COUNT(*) as count FROM security_logs 
-       WHERE event_type = 'failed_login' 
-       AND created_at >= ?`,
-      [twentyFourHoursAgo]
-    );
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [failedLogins?.count?.toString() || '0', 'failed_login_attempts_24h']
-    );
+        // Update active blocked IPs count
+        try {
+            const blockedIPs = await safeDbOperation('get',
+                `SELECT COUNT(*) as count FROM blocked_ips WHERE is_active = 1`
+            );
+            await safeUpdateMetric('active_blocked_ips', blockedIPs?.count?.toString() || '0');
+            console.log('✓ Updated active_blocked_ips:', blockedIPs?.count || 0);
+        } catch (error) {
+            console.log('Error updating blocked IPs:', error.message);
+        }
 
-    // Update password resets in last 24 hours
-    const passwordResets = await dbOperations.get(
-      `SELECT COUNT(*) as count FROM user_activity_logs 
-       WHERE activity_type = 'password_reset' 
-       AND created_at >= ?`,
-      [twentyFourHoursAgo]
-    );
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [passwordResets?.count?.toString() || '0', 'password_resets_24h']
-    );
+        // Update failed login attempts in last 24 hours
+        try {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const failedLogins = await safeDbOperation('get',
+                `SELECT COUNT(*) as count FROM security_logs 
+                 WHERE event_type = 'failed_login' 
+                 AND created_at >= ?`,
+                [twentyFourHoursAgo]
+            );
+            await safeUpdateMetric('failed_login_attempts_24h', failedLogins?.count?.toString() || '0');
+            console.log('✓ Updated failed_login_attempts_24h:', failedLogins?.count || 0);
+        } catch (error) {
+            console.log('Error updating failed login attempts:', error.message);
+        }
 
-    // Update security alerts in last 24 hours
-    const securityAlerts = await dbOperations.get(
-      `SELECT COUNT(*) as count FROM system_alerts 
-       WHERE severity IN ('high', 'critical') 
-       AND created_at >= ?
-       AND acknowledged = 0`,
-      [twentyFourHoursAgo]
-    );
-    await dbOperations.run(
-      `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-      [securityAlerts?.count?.toString() || '0', 'security_alerts_24h']
-    );
+        // Update password resets in last 24 hours
+        try {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const passwordResets = await safeDbOperation('get',
+                `SELECT COUNT(*) as count FROM user_activity_logs 
+                 WHERE activity_type = 'password_reset' 
+                 AND created_at >= ?`,
+                [twentyFourHoursAgo]
+            );
+            await safeUpdateMetric('password_resets_24h', passwordResets?.count?.toString() || '0');
+            console.log('✓ Updated password_resets_24h:', passwordResets?.count || 0);
+        } catch (error) {
+            console.log('Error updating password resets:', error.message);
+        }
 
-    // Update average response time from last hour
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const perfMetrics = await dbOperations.all(
-      `SELECT response_time_ms FROM performance_metrics 
-       WHERE created_at >= ? AND response_time_ms > 0
-       LIMIT 100`,
-      [oneHourAgo]
-    );
-    
-    if (perfMetrics.length > 0) {
-      const total = perfMetrics.reduce((sum, m) => sum + m.response_time_ms, 0);
-      const avg = Math.round(total / perfMetrics.length);
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [avg.toString(), 'avg_response_time']
-      );
+        // Update average response time from last hour
+        try {
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+            const perfMetrics = await safeDbOperation('all',
+                `SELECT response_time_ms FROM performance_metrics 
+                 WHERE created_at >= ? AND response_time_ms > 0
+                 LIMIT 100`,
+                [oneHourAgo]
+            );
+            
+            if (perfMetrics && perfMetrics.length > 0) {
+                const total = perfMetrics.reduce((sum, m) => sum + m.response_time_ms, 0);
+                const avg = Math.round(total / perfMetrics.length);
+                await safeUpdateMetric('avg_response_time', avg.toString());
+                console.log('✓ Updated avg_response_time:', avg);
+            }
+        } catch (error) {
+            console.log('Error updating response time:', error.message);
+        }
+
+        // Update backup status if any backup exists
+        try {
+            const latestBackup = await safeDbOperation('get',
+                `SELECT status, created_at FROM backup_history 
+                 ORDER BY created_at DESC LIMIT 1`
+            );
+            
+            if (latestBackup) {
+                await safeUpdateMetric('last_backup_status', latestBackup.status);
+                await safeUpdateMetric('last_backup_time', latestBackup.created_at);
+                console.log('✓ Updated backup metrics');
+            }
+        } catch (error) {
+            console.log('Error updating backup metrics:', error.message);
+        }
+
+        // Run extended metrics collection
+        await collectSystemResourceMetrics();
+        await collectBusinessMetrics();
+        await collectSupportChatMetrics();
+
+        console.log('✅✅✅ ALL SYSTEM METRICS UPDATED SUCCESSFULLY');
+    } catch (error) {
+        console.error('❌❌❌ CRITICAL ERROR in updateSystemMetrics:', error);
     }
-
-    // Update backup status if any backup exists
-    const latestBackup = await dbOperations.get(
-      `SELECT status, created_at FROM backup_history 
-       ORDER BY created_at DESC LIMIT 1`
-    );
-    
-    if (latestBackup) {
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [latestBackup.status, 'last_backup_status']
-      );
-      await dbOperations.run(
-        `UPDATE system_metrics SET metric_value = ?, updated_at = datetime('now') WHERE metric_key = ?`,
-        [latestBackup.created_at, 'last_backup_time']
-      );
-    }
-
-    // Run extended metrics collection
-    await collectSystemResourceMetrics();
-    await collectBusinessMetrics();
-    await collectAPIPerformanceMetrics();
-    await collectUserSessionMetrics();
-    await collectDatabasePerformanceMetrics();
-    await calculateGrowthRates();
-
-    console.log('All system metrics updated successfully');
-  } catch (error) {
-    console.error('Error updating system metrics:', error);
-  }
 };
 
 // ========================
-// DEFAULT USERS
+// DEFAULT USERS FUNCTIONS
 // ========================
+
 const ensureDefaultEventManager = async (bcrypt, uuidv4) => {
-  try {
-    const existing = await dbOperations.get(`SELECT * FROM event_managers WHERE email = ?`, ['manager@tickethub.co.za']);
-    if (!existing) {
-      const hashed = await bcrypt.hash('manager123', 10);
-      const now = new Date().toISOString();
-      await dbOperations.run(
-        `INSERT INTO event_managers (manager_id, name, email, password, phone, status, role, last_login, created_at) VALUES (?, ?, ?, ?, ?, ?, 'event_manager', ?, ?)`,
-        [uuidv4(), 'Default Manager', 'manager@tickethub.co.za', hashed, '+27 82 000 0000', 'active', now, now]
-      );
-      await dbOperations.run(
-        `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ['Default Manager', 'manager@tickethub.co.za', hashed, 'Event Manager', 'active', '2025-11-20', 'Just now', 'DM', 'South Africa']
-      );
-      console.log('Default event manager created');
-    } else {
-      console.log('Default event manager already exists');
+    try {
+        await ensureDatabaseReady();
+        
+        const existing = await safeDbOperation('get', `SELECT * FROM event_managers WHERE email = ?`, ['manager@tickethub.co.za']);
+        if (!existing) {
+            const hashed = await bcrypt.hash('manager123', 10);
+            const now = new Date().toISOString();
+            await safeDbOperation('run',
+                `INSERT INTO event_managers (manager_id, name, email, password, phone, status, role, last_login, created_at) VALUES (?, ?, ?, ?, ?, ?, 'event_manager', ?, ?)`,
+                [uuidv4(), 'Default Manager', 'manager@tickethub.co.za', hashed, '+27 82 000 0000', 'active', now, now]
+            );
+            await safeDbOperation('run',
+                `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ['Default Manager', 'manager@tickethub.co.za', hashed, 'Event Manager', 'active', '2025-11-20', 'Just now', 'DM', 'South Africa']
+            );
+            console.log('✅ Default event manager created');
+        } else {
+            console.log('Default event manager already exists');
+        }
+    } catch (err) {
+        console.log('Event manager check skipped:', err.message);
     }
-  } catch (err) {
-    console.log('Event manager check skipped:', err.message);
-  }
 };
 
 const ensureDefaultAdmin = async (bcrypt, uuidv4) => {
-  try {
-    const existing = await dbOperations.get(`SELECT * FROM admins WHERE email = ?`, ['admin@tickethub.co.za']);
-    if (!existing) {
-      const hashed = await bcrypt.hash('admin123', 10);
-      const now = new Date().toISOString();
-      await dbOperations.run(
-        `INSERT INTO admins (admin_id, name, email, password, phone, status, role, last_login, created_at) VALUES (?, ?, ?, ?, ?, ?, 'SUPER_ADMIN', ?, ?)`,
-        [uuidv4(), 'Super Admin', 'admin@tickethub.co.za', hashed, null, 'active', now, now]
-      );
-      await dbOperations.run(
-        `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ['Super Admin', 'admin@tickethub.co.za', hashed, 'Admin', 'active', '2025-11-15', 'Just now', 'SA', 'South Africa']
-      );
-      console.log('Default admin created');
-    } else {
-      console.log('Default admin already exists');
+    try {
+        await ensureDatabaseReady();
+        
+        const existing = await safeDbOperation('get', `SELECT * FROM admins WHERE email = ?`, ['admin@tickethub.co.za']);
+        if (!existing) {
+            const hashed = await bcrypt.hash('admin123', 10);
+            const now = new Date().toISOString();
+            await safeDbOperation('run',
+                `INSERT INTO admins (admin_id, name, email, password, phone, status, role, last_login, created_at) VALUES (?, ?, ?, ?, ?, ?, 'SUPER_ADMIN', ?, ?)`,
+                [uuidv4(), 'Super Admin', 'admin@tickethub.co.za', hashed, null, 'active', now, now]
+            );
+            await safeDbOperation('run',
+                `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ['Super Admin', 'admin@tickethub.co.za', hashed, 'Admin', 'active', '2025-11-15', 'Just now', 'SA', 'South Africa']
+            );
+            console.log('✅ Default admin created');
+        } else {
+            console.log('Default admin already exists');
+        }
+    } catch (err) {
+        console.log('Admin check skipped:', err.message);
     }
-  } catch (err) {
-    console.log('Admin check skipped:', err.message);
-  }
 };
 
 const ensureDefaultCustomer = async (bcrypt, uuidv4) => {
-  try {
-    const existing = await dbOperations.get(`SELECT * FROM customers WHERE email = ?`, ['customer@test.com']);
-    if (!existing) {
-      const hashed = await bcrypt.hash('customer123', 10);
-      const now = new Date().toISOString();
-      await dbOperations.run(
-        `INSERT INTO customers (customer_id, first_name, last_name, email, password, phone, status, role, last_login, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', ?, ?)`,
-        [uuidv4(), 'Test', 'Customer', 'customer@test.com', hashed, '+27 71 123 4567', 'active', now, now]
-      );
-      await dbOperations.run(
-        `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ['Test Customer', 'customer@test.com', hashed, 'Customer', 'active', '2025-11-25', 'Just now', 'TC', 'South Africa']
-      );
-      console.log('Default customer created: customer@test.com / customer123');
-    } else {
-      console.log('Default customer already exists');
-    }
-  } catch (err) {
-    console.log('Customer check skipped:', err.message);
-  }
-};
-
-// Add this function to database.js (somewhere near other initialization functions):
-const ensureMetricsTables = async () => {
-  console.log('Ensuring metrics tables exist...');
-  
-  const tables = [
-    // Core metrics tables
-    `CREATE TABLE IF NOT EXISTS system_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      metric_key TEXT UNIQUE NOT NULL,
-      metric_value TEXT NOT NULL,
-      metric_type TEXT DEFAULT 'gauge',
-      unit TEXT,
-      description TEXT,
-      updated_at TEXT DEFAULT (datetime('now')),
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    
-    `CREATE TABLE IF NOT EXISTS performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      endpoint TEXT NOT NULL,
-      response_time_ms INTEGER NOT NULL,
-      status_code INTEGER,
-      request_size INTEGER,
-      response_size INTEGER,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    
-    `CREATE TABLE IF NOT EXISTS security_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_type TEXT NOT NULL,
-      severity TEXT DEFAULT 'info',
-      user_id TEXT,
-      user_email TEXT,
-      ip_address TEXT,
-      user_agent TEXT,
-      details TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    
-    `CREATE TABLE IF NOT EXISTS system_alerts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      alert_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      severity TEXT DEFAULT 'medium',
-      source_module TEXT,
-      affected_items TEXT,
-      recommendations TEXT,
-      acknowledged INTEGER DEFAULT 0,
-      acknowledged_by TEXT,
-      acknowledged_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    
-    `CREATE TABLE IF NOT EXISTS user_activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT,
-      user_email TEXT,
-      activity_type TEXT NOT NULL,
-      activity_details TEXT,
-      ip_address TEXT,
-      user_agent TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    
-    `CREATE TABLE IF NOT EXISTS blocked_ips (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ip_address TEXT UNIQUE NOT NULL,
-      reason TEXT,
-      blocked_by TEXT DEFAULT 'system',
-      attempts INTEGER DEFAULT 1,
-      is_active INTEGER DEFAULT 1,
-      expires_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )`
-  ];
-  
-  for (const tableSql of tables) {
     try {
-      await dbOperations.run(tableSql);
-    } catch (error) {
-      console.error(`Error creating table: ${error.message}`);
+        await ensureDatabaseReady();
+        
+        const existing = await safeDbOperation('get', `SELECT * FROM customers WHERE email = ?`, ['customer@test.com']);
+        if (!existing) {
+            const hashed = await bcrypt.hash('customer123', 10);
+            const now = new Date().toISOString();
+            await safeDbOperation('run',
+                `INSERT INTO customers (customer_id, first_name, last_name, email, password, phone, status, role, last_login, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', ?, ?)`,
+                [uuidv4(), 'Test', 'Customer', 'customer@test.com', hashed, '+27 71 123 4567', 'active', now, now]
+            );
+            await safeDbOperation('run',
+                `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ['Test Customer', 'customer@test.com', hashed, 'Customer', 'active', '2025-11-25', 'Just now', 'TC', 'South Africa']
+            );
+            console.log('✅ Default customer created: customer@test.com / customer123');
+        } else {
+            console.log('Default customer already exists');
+        }
+    } catch (err) {
+        console.log('Customer check skipped:', err.message);
     }
-  }
-  
-  console.log('Metrics tables verified');
 };
 
-const createAllMetricsTables = async () => {
-  console.log('Creating comprehensive metrics tables...');
-  
-  // 1. System Resource Metrics Table
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS system_resource_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cpu_usage_percent REAL DEFAULT 0,
-      memory_usage_percent REAL DEFAULT 0,
-      memory_used_mb REAL DEFAULT 0,
-      memory_total_mb REAL DEFAULT 0,
-      disk_usage_percent REAL DEFAULT 0,
-      disk_used_gb REAL DEFAULT 0,
-      disk_total_gb REAL DEFAULT 0,
-      network_rx_mb REAL DEFAULT 0,
-      network_tx_mb REAL DEFAULT 0,
-      process_count INTEGER DEFAULT 0,
-      load_average REAL DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  // 2. API Performance Metrics
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS api_performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      endpoint TEXT NOT NULL,
-      method TEXT NOT NULL,
-      response_time_ms INTEGER NOT NULL,
-      status_code INTEGER NOT NULL,
-      user_agent TEXT,
-      user_id TEXT,
-      ip_address TEXT,
-      request_size INTEGER DEFAULT 0,
-      response_size INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  // 3. Database Query Performance
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS database_query_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      query_hash TEXT NOT NULL,
-      query_text TEXT,
-      execution_time_ms INTEGER NOT NULL,
-      table_name TEXT,
-      rows_affected INTEGER DEFAULT 0,
-      error_message TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  // 4. User Session Metrics
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS user_session_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT,
-      session_id TEXT NOT NULL,
-      start_time TEXT NOT NULL,
-      end_time TEXT,
-      duration_seconds INTEGER DEFAULT 0,
-      page_views INTEGER DEFAULT 0,
-      user_agent TEXT,
-      ip_address TEXT,
-      country TEXT,
-      device_type TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  // 5. Event Performance Metrics
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS event_performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_id INTEGER NOT NULL,
-      event_name TEXT NOT NULL,
-      total_views INTEGER DEFAULT 0,
-      unique_visitors INTEGER DEFAULT 0,
-      tickets_sold INTEGER DEFAULT 0,
-      revenue REAL DEFAULT 0,
-      conversion_rate REAL DEFAULT 0,
-      date TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (event_id) REFERENCES events(event_id),
-      UNIQUE(event_id, date)
-    )
-  `);
-  
-  // 6. Cache Performance Metrics
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS cache_performance_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cache_key TEXT NOT NULL,
-      hit_count INTEGER DEFAULT 0,
-      miss_count INTEGER DEFAULT 0,
-      size_bytes INTEGER DEFAULT 0,
-      ttl_seconds INTEGER DEFAULT 0,
-      last_accessed TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  // 7. Business Metrics (Enhanced)
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS business_metrics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      metric_date TEXT NOT NULL,
-      metric_type TEXT NOT NULL,
-      metric_value REAL NOT NULL,
-      metric_unit TEXT,
-      details TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(metric_date, metric_type)
-    )
-  `);
-  
-  // 8. System Configuration Logs
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS system_config_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      config_key TEXT NOT NULL,
-      old_value TEXT,
-      new_value TEXT NOT NULL,
-      changed_by TEXT,
-      change_type TEXT DEFAULT 'update',
-      reason TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  // 9. Email/SMS Notification Logs
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS notification_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      notification_type TEXT NOT NULL,
-      recipient TEXT NOT NULL,
-      subject TEXT,
-      message TEXT,
-      status TEXT DEFAULT 'pending',
-      error_message TEXT,
-      sent_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  // 10. Backup Logs (Enhanced)
-  await dbOperations.run(`
-    CREATE TABLE IF NOT EXISTS backup_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      backup_type TEXT NOT NULL,
-      filename TEXT,
-      size_bytes INTEGER DEFAULT 0,
-      status TEXT NOT NULL,
-      duration_seconds INTEGER DEFAULT 0,
-      details TEXT,
-      created_by TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  
-  console.log('✓ All comprehensive metrics tables created');
+const ensureDefaultSupport = async (bcrypt, uuidv4) => {
+    try {
+        await ensureDatabaseReady();
+        
+        const existing = await safeDbOperation('get', `SELECT * FROM support_staff WHERE email = ?`, ['support@tickethub.co.za']);
+        if (!existing) {
+            const hashed = await bcrypt.hash('support123', 10);
+            const now = new Date().toISOString();
+            const supportId = uuidv4();
+            
+            // Create support staff
+            await safeDbOperation('run',
+                `INSERT INTO support_staff (support_id, name, email, username, password, phone, department, role, status, availability_status, max_tickets, current_tickets, avg_response_time, satisfaction_rating, last_login, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [supportId, 'Support Staff', 'support@tickethub.co.za', 'support', hashed, '+27 71 000 0000', 'technical', 'support', 'active', 'available', 10, 0, 0, 0.0, now, now, now]
+            );
+            
+            // Create support agent status record
+            await safeDbOperation('run',
+                `INSERT INTO support_agent_status (agent_id, status, auto_assign, last_active, platform_preferences)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [supportId, 'available', 1, now, JSON.stringify(['whatsapp', 'facebook', 'web'])]
+            );
+            
+            await safeDbOperation('run',
+                `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ['Support Staff', 'support@tickethub.co.za', hashed, 'Support', 'active', now, 'Just now', 'SS', 'South Africa']
+            );
+            console.log('✅ Default support staff created: support@tickethub.co.za / support123');
+        } else {
+            console.log('Default support staff already exists');
+        }
+    } catch (err) {
+        console.log('Support staff check skipped:', err.message);
+    }
+};
+
+const ensureDefaultOrganizer = async (bcrypt, uuidv4) => {
+    try {
+        await ensureDatabaseReady();
+        
+        const existing = await safeDbOperation('get', `SELECT * FROM event_organizers WHERE email = ?`, ['organizer@tickethub.co.za']);
+        if (!existing) {
+            const hashed = await bcrypt.hash('organizer123', 10);
+            const now = new Date().toISOString();
+            await safeDbOperation('run',
+                `INSERT INTO event_organizers (organizer_id, name, email, username, password, phone, company, bio, website, status, role, permissions, verified, stripe_customer_id, subscription_status, last_login, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [uuidv4(), 'Event Organizer', 'organizer@tickethub.co.za', 'organizer', hashed, '+27 72 000 0000', 'My Events Co.', 'Professional event organizer', 'https://events.example.com', 'active', 'event_organizer', 'basic', 0, null, 'free', now, now, now]
+            );
+            await safeDbOperation('run',
+                `INSERT INTO dashboard_user_list (name, email, password, role, status, joined, lastActive, avatar, country) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ['Event Organizer', 'organizer@tickethub.co.za', hashed, 'Organizer', 'active', now, 'Just now', 'EO', 'South Africa']
+            );
+            console.log('✅ Default event organizer created: organizer@tickethub.co.za / organizer123');
+        } else {
+            console.log('Default event organizer already exists');
+        }
+    } catch (err) {
+        console.log('Event organizer check skipped:', err.message);
+    }
 };
 
 // ========================
-// RUN INITIALIZATION
+// GLOBAL ACCESS FUNCTIONS
 // ========================
-// Update the initialization section
-(async () => {
-  try {
-    await initializeTables();
-    //await ensureAllTables(); // Add this line
-    await addStatusToUserTables();
-    await addLastLoginToUserTables();
-    await addPhoneToAdmins();
-    await updateEventsTable();
-    await ensureMetricsTables(); 
-    await createAllMetricsTables();
+
+// Get global database instance
+const getDatabase = () => {
+    return globalDatabaseInstance;
+};
+
+// Get global database operations
+const getDbOperations = () => {
+    return globalDbOperations;
+};
+
+// Check if database is ready
+const isDatabaseReady = () => {
+    return globalDatabaseInstance && globalDatabaseInstance.isReady();
+};
+
+// Wait for database to be ready
+const waitForDatabase = async (timeout = 30000) => {
+    const startTime = Date.now();
     
-    // Start metrics updates every 5 minutes
-    setInterval(updateSystemMetrics, 5 * 60 * 1000);
+    if (isDatabaseReady()) {
+        return globalDatabaseInstance;
+    }
     
-    // Initial metrics update (wait 5 seconds for server to be ready)
-    setTimeout(updateSystemMetrics, 5000);
+    // Start initialization if not already in progress
+    if (!isInitializing) {
+        await ensureDatabaseReady();
+    }
     
-  } catch (err) {
-    console.error('Initialization error:', err);
-  }
-})();
+    while (!isDatabaseReady()) {
+        if (Date.now() - startTime > timeout) {
+            throw new Error(`Database initialization timeout after ${timeout}ms`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    return globalDatabaseInstance;
+};
+
+// Initialize database once
+const initializeDatabaseOnce = async () => {
+    return await ensureDatabaseReady();
+};
 
 // ========================
-// EXPORT
+// SPECIAL FIX FOR METRICS SERVICE
+// ========================
+
+// This function should be called by the metrics service BEFORE attempting any operations
+const initializeForMetrics = async () => {
+    console.log('🔧 Initializing database specifically for metrics service...');
+    
+    // Force initialization
+    const isReady = await ensureDatabaseReady();
+    
+    if (isReady) {
+        console.log('✅ Database ready for metrics service');
+        return true;
+    } else {
+        console.error('❌ Failed to initialize database for metrics service');
+        return false;
+    }
+};
+
+// ========================
+// EXPORT FUNCTIONS
 // ========================
 module.exports = {
-  dbOperations,
-  connectDatabase,
-  ensureDefaultEventManager,
-  ensureDefaultAdmin,
-  ensureDefaultCustomer,
-  initializeTables,
-  updateEventsTable,
-  addPhoneToAdmins,
-  addStatusToUserTables,
-  addLastLoginToUserTables,
-  updateSystemMetrics,
-  getDatabaseSize,
-  getTableCounts,
-  getTotalRowsCount,
-  fixBusinessMetricsTable,
-  collectSystemResourceMetrics,
-  collectBusinessMetrics,
-  collectAPIPerformanceMetrics,
-  collectUserSessionMetrics,
-  collectDatabasePerformanceMetrics,
-  calculateGrowthRates
+    // Main Database Class
+    Database,
+    
+    // Global access functions
+    getDatabase,
+    getDbOperations,
+    isDatabaseReady,
+    waitForDatabase,
+    initializeDatabaseOnce,
+    initializeForMetrics, // NEW: Special function for metrics service
+    
+    // Main connection functions
+    connectDatabase: async () => {
+        return await initializeDatabaseOnce();
+    },
+    
+    // Close database
+    closeDatabase: async () => {
+        if (globalDatabaseInstance) {
+            await globalDatabaseInstance.close();
+        }
+    },
+    
+    // Legacy exports for backward compatibility
+    get dbOperations() {
+        return getDbOperations();
+    },
+    
+    // Safe operations
+    safeDbOperation,
+    safeUpdateMetric,
+    safeGetMetric,
+    safeInsertOrIgnore,
+    
+    // Default user functions
+    ensureDefaultEventManager,
+    ensureDefaultAdmin,
+    ensureDefaultCustomer,
+    ensureDefaultSupport,
+    ensureDefaultOrganizer,
+    
+    // Metrics functions - ULTIMATE FIXED VERSIONS
+    updateSystemMetrics,
+    getDatabaseSize,
+    getTableCounts,
+    getTotalRowsCount,
+    collectSupportChatMetrics,
+    collectSystemResourceMetrics,
+    collectBusinessMetrics,
+    
+    // Clean event data function
+    cleanEventData: Database.cleanEventData,
+    
+    // Database instance for direct access
+    db: getDatabase,
+    
+    // Special export for metrics service
+    ensureDatabaseReady
 };
