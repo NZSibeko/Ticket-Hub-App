@@ -32,9 +32,21 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+backend/.env
+backend/.env.*
 
 # typescript
 *.tsbuildinfo
+
+# local databases and backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.backup
+backups/
+backend/backups/
 
 app-example
 
