@@ -7,17 +7,26 @@ if (!process.env.JWT_SECRET) {
 }
 
 module.exports = function(server) {
+  const DEFAULT_ALLOWED_ORIGINS = [
+    'http://localhost:8082',
+    'http://localhost:8081',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:19006',
+    'http://localhost:19000',
+    'http://localhost:5173'
+  ];
+  const CONFIGURED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const ALLOWED_ORIGINS = CONFIGURED_ORIGINS.length
+    ? CONFIGURED_ORIGINS
+    : DEFAULT_ALLOWED_ORIGINS;
+
   const io = socketIo(server, {
     cors: {
-      origin: [
-        'http://localhost:8082',
-        'http://localhost:8081',
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:19006',
-        'http://localhost:19000',
-        'http://localhost:5173'
-      ],
+      origin: ALLOWED_ORIGINS,
       credentials: true
     }
   });

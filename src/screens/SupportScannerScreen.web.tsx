@@ -89,7 +89,7 @@ const SupportScannerScreen = ({ navigation }) => {
           body: JSON.stringify({
             ticket_code: data,
             event_id: eventInfo.event_id,
-            validator_id: user.user_id,
+            validator_id: user.userId || user.user_id,
             source: 'support'
           })
         }

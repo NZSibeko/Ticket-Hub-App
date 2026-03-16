@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import ODataService from '../services/ODataService';
+import axios from 'axios';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 import { useNavigation } from '@react-navigation/native';
 
 const EventListScreen = () => {
@@ -12,12 +13,10 @@ const EventListScreen = () => {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const today = new Date().toISOString().split('T')[0];
-        const data = await ODataService.get('zi_events', {
-          $filter: `end_date ge ${today}`,
-          $orderby: 'start_date'
-        });
-        setEvents(data);
+        const baseUrl = getApiBaseUrlSync();
+        const response = await axios.get(`${baseUrl}/api/events/public`);
+        const list = response.data?.events || response.data || [];
+        setEvents(Array.isArray(list) ? list : []);
       } catch (err) {
         setError(err.message);
       } finally {

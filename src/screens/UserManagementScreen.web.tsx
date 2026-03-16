@@ -15,8 +15,9 @@ import {
 } from "react-native";
 import ScreenContainer from "../components/ScreenContainer";
 import { useAuth } from "../context/AuthContext";
+import { getApiBaseUrlSync } from "../utils/apiBase";
 
-const API_URL = "http://localhost:3000";
+const API_URL = getApiBaseUrlSync();
 
 const UserManagementScreen = ({ navigation }) => {
   const { getAuthHeader } = useAuth();

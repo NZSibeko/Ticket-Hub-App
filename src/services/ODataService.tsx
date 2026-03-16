@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:3000';
+import { getApiBaseUrlSync } from '../utils/apiBase';
+
+const BASE_URL = getApiBaseUrlSync();
 
 class ODataService {
   constructor() {

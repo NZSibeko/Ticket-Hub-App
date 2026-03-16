@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import ScreenContainer from "../components/ScreenContainer";
 import { useAuth } from "../context/AuthContext";
+import { getApiBaseUrlSync } from "../utils/apiBase";
 import {
   formatMetricValue,
   formatShortTime,
@@ -628,7 +629,7 @@ const AdminDashboardScreen = ({ navigation }) => {
   };
 
   const buildWsUrl = () => {
-    const baseUrl = apiBaseUrl || "http://localhost:8081";
+    const baseUrl = apiBaseUrl || getApiBaseUrlSync();
     const wsProtocol = baseUrl.startsWith("https") ? "wss" : "ws";
     const authToken = token || "";
     const wsHost = baseUrl.replace(/^https?:\/\//, "");

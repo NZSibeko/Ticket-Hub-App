@@ -2,11 +2,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 // ===================================================================
 // CONFIGURATION
 // ===================================================================
-const API_BASE = 'http://localhost:8081';
+const API_BASE = getApiBaseUrlSync() || (typeof window !== 'undefined' ? window.location.origin : '');
 const TOKEN = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
 // Tailwind CDN + Full-Screen & Scroll Fix

@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL =
-  (typeof process !== 'undefined' && process.env.REACT_APP_API_URL) ||
-  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081');
+const API_URL = getApiBaseUrlSync() ||
+  (typeof window !== 'undefined' ? window.location.origin : '');
 const getWsBaseUrl = (baseUrl) => baseUrl.replace(/^http/, 'ws');
 
 // Add Tailwind CDN

@@ -128,7 +128,7 @@ console.debug = (...args) => {
 
 // === DATABASE INITIALIZATION & SETUP ===
 
-const NGROK_URL = "https://hysteretic-susann-struthious.ngrok-free.dev";
+const NGROK_URL = process.env.PUBLIC_URL || "";
 let MetricsService = null;
 let metricsService = null;
 let metricsInitialized = false;
@@ -269,25 +269,32 @@ app.locals.wsClients = new Map();
 // ============================
 // FIXED CORS CONFIGURATION
 // ============================
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://tickethub-whatsapp.loca.lt",
+  "http://localhost:8082",
+  "http://localhost:8081",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:19006",
+  "http://localhost:19000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5500",
+  "http://localhost:8080",
+  "http://localhost:8083",
+];
+const CONFIGURED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const EFFECTIVE_ALLOWED_ORIGINS = CONFIGURED_ORIGINS.length
+  ? CONFIGURED_ORIGINS
+  : DEFAULT_ALLOWED_ORIGINS;
+
 app.use(
   cors({
     origin: function (origin, callback) {
-      const allowedOrigins = [
-        "https://hysteretic-susann-struthious.ngrok-free.dev",
-        "https://tickethub-whatsapp.loca.lt",
-        "http://localhost:8082",
-        "http://localhost:8081",
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:19006",
-        "http://localhost:19000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5500",
-        "http://localhost:8080",
-        "http://localhost:8083",
-      ];
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      if (EFFECTIVE_ALLOWED_ORIGINS.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
         log.warn("CORS", "Blocked origin", { origin });
@@ -317,14 +324,7 @@ app.use((req, res, next) => {
 });
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  const allowedOrigins = [
-    "https://hysteretic-susann-struthious.ngrok-free.dev",
-    "http://localhost:8082",
-    "http://localhost:8081",
-    "http://localhost:3000",
-    "http://localhost:3001",
-  ];
-  if (allowedOrigins.includes(origin)) {
+  if (EFFECTIVE_ALLOWED_ORIGINS.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
   } else {
     res.header("Access-Control-Allow-Origin", "null");
@@ -984,6 +984,20 @@ async function mountRoutes() {
     console.log("⚠ Events routes not available:", error.message);
   }
   console.log("[ROUTE MOUNT] Finished events route mount attempt.");
+
+  // Payments & Ticketing Routes
+  try {
+    const paymentsRoutes = await loadModule("./routes/payments.tsx");
+    app.use(
+      "/api/payments",
+      authenticateToken,
+      checkUserStatus,
+      paymentsRoutes,
+    );
+    console.log("✓ Payments routes loaded");
+  } catch (error) {
+    console.log("⚠ Payments routes not available:", error.message);
+  }
 
   // Social Media / Webhook Routes
   try {

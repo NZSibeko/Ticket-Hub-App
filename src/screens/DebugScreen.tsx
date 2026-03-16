@@ -10,6 +10,7 @@ import {
     View
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 const DebugScreen = () => {
   const { user, getAuthHeader, logout } = useAuth();
@@ -26,7 +27,8 @@ const DebugScreen = () => {
       // Test 1: Health endpoint
       setStatus('Testing health endpoint...');
       try {
-        const healthRes = await axios.get('http://localhost:8081/api/health', { timeout: 5000 });
+        const baseUrl = getApiBaseUrlSync();
+        const healthRes = await axios.get(`${baseUrl}/api/health`, { timeout: 5000 });
         results.health = {
           success: true,
           message: healthRes.data.message,
@@ -45,7 +47,8 @@ const DebugScreen = () => {
       const headers = getAuthHeader();
       if (headers.Authorization) {
         try {
-          const debugRes = await axios.get('http://localhost:8081/api/debug/database-test', { 
+          const baseUrl = getApiBaseUrlSync();
+          const debugRes = await axios.get(`${baseUrl}/api/debug/database-test`, { 
             headers,
             timeout: 10000 
           });
@@ -73,7 +76,8 @@ const DebugScreen = () => {
       setStatus('Testing events endpoint...');
       if (headers.Authorization) {
         try {
-          const eventsRes = await axios.get('http://localhost:8081/api/events', { 
+          const baseUrl = getApiBaseUrlSync();
+          const eventsRes = await axios.get(`${baseUrl}/api/events`, { 
             headers,
             timeout: 10000 
           });
@@ -182,7 +186,7 @@ const DebugScreen = () => {
           💡 If tests fail:
         </Text>
         <Text style={styles.tip}>1. Ensure backend is running: node backend/server.js</Text>
-        <Text style={styles.tip}>2. Check server URL: http://localhost:8081</Text>
+        <Text style={styles.tip}>2. Check server URL: {getApiBaseUrlSync()}</Text>
         <Text style={styles.tip}>3. Verify database has events</Text>
         <Text style={styles.tip}>4. Try logging out and back in</Text>
       </View>

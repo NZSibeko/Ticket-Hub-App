@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 const USED_KEY = 'scanner-web:used';
 const HISTORY_KEY = 'scanner-web:history';
@@ -48,7 +49,7 @@ const parsePayload = (payload) => {
 
 const ScannerScreen = ({ navigation }) => {
   const { width } = useWindowDimensions();
-  const { user } = useAuth();
+  const { user, getAuthHeader } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [selectedEventId, setSelectedEventId] = useState(EVENTS[0].id);
   const [manualCode, setManualCode] = useState('');
@@ -97,25 +98,61 @@ const ScannerScreen = ({ navigation }) => {
     setLocked(true);
     setProcessing(true);
     setDeskNote(`Running integrity checks for ${parsed.code} at ${currentEvent.gate}.`);
-    await new Promise((resolve) => setTimeout(resolve, source === 'camera' ? 850 : 450));
+
     const now = new Date().toISOString();
-    const ticket = TICKETS[parsed.code];
-    const previousUse = usedLedger[parsed.code];
-    let status = 'approved';
-    let summary = 'Ticket is active, event-aligned, and ready for entry.';
-    let recommendation = 'Open the lane and admit the guest.';
-    let flags = [];
-    if (!ticket) { status = 'fraud'; summary = 'QR payload was not found in the trusted ticket ledger.'; recommendation = 'Deny entry and request a manual booking confirmation.'; flags = ['Registry lookup failed', 'Payload is not recognized by the validation desk']; }
-    else if (ticket.status === 'void') { status = 'fraud'; summary = 'Ticket has been voided or refunded in the commerce ledger.'; recommendation = 'Hold entry and route the guest to the ticket resolution desk.'; flags = ticket.flags || ['Ticket status is void']; }
-    else if (previousUse) { status = 'duplicate'; summary = `This ticket was already used at ${previousUse.gate} on ${formatDateTime(previousUse.firstValidatedAt)}.`; recommendation = 'Block re-entry unless a supervisor approves an exception.'; flags = [`First scanned by ${previousUse.operator}`, `Original desk: ${previousUse.gate}`]; }
-    else if (ticket.eventId !== currentEvent.id || (parsed.eventId && parsed.eventId !== currentEvent.id)) { status = 'review'; summary = 'Ticket belongs to a different event or carries conflicting event metadata.'; recommendation = 'Pause entry and confirm venue, date, and ownership with a supervisor.'; flags = ['Ticket is registered for another event', 'Payload metadata does not match the active gate']; }
-    else if (ticket.risk === 'high') { status = 'review'; summary = 'Ticket passed basic signature checks but still carries elevated risk indicators.'; recommendation = 'Verify the guest identity and obtain supervisor approval before entry.'; flags = ticket.flags || ['Elevated issuer risk']; }
-    const entry = { id: `${parsed.code}-${now}`, code: parsed.code, status, raw: parsed.raw, eventName: (EVENTS.find((event) => event.id === (ticket?.eventId || currentEvent.id)) || currentEvent).name, attendee: ticket?.attendee || 'Unknown guest', seat: ticket?.seat || 'Unassigned', tier: ticket?.tier || 'Manual review', scannedAt: now, summary, recommendation, flags };
-    if (status === 'approved') setUsedLedger((current) => ({ ...current, [parsed.code]: { firstValidatedAt: now, operator, gate: currentEvent.gate, eventId: currentEvent.id } }));
-    setHistory((current) => [entry, ...current].slice(0, 10));
-    setResult(entry);
-    setProcessing(false);
-    setDeskNote(recommendation);
+    try {
+      const baseUrl = getApiBaseUrlSync() || (typeof window !== 'undefined' ? window.location.origin : '');
+      const headers = getAuthHeader ? getAuthHeader() : {};
+      const response = await fetch(`${baseUrl}/api/payments/tickets/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({
+          ticket_code: parsed.code,
+          event_id: parsed.eventId || currentEvent.id,
+          source: source === 'manual' ? 'manual' : 'scanner'
+        })
+      });
+      const result = await response.json();
+      const decision = result.decision || {};
+      const status = decision.status || (result.success ? 'approved' : 'review');
+      const summary = decision.label || (result.success ? 'Entry approved.' : 'Manual review required.');
+      const recommendation = decision.status === 'fraud'
+        ? 'Deny entry and route to ticket resolution.'
+        : decision.status === 'duplicate'
+          ? 'Block re-entry unless supervisor approves.'
+          : decision.status === 'review'
+            ? 'Pause entry and confirm details with supervisor.'
+            : 'Open the lane and admit the guest.';
+      const flags = decision.flags || [];
+
+      const entry = {
+        id: `${parsed.code}-${now}`,
+        code: parsed.code,
+        status,
+        raw: parsed.raw,
+        eventName: currentEvent.name,
+        attendee: result.ticket?.first_name ? `${result.ticket.first_name} ${result.ticket.last_name || ''}`.trim() : 'Unknown guest',
+        seat: result.ticket?.seat || 'Unassigned',
+        tier: result.ticket?.ticket_type || 'General',
+        scannedAt: now,
+        summary,
+        recommendation,
+        flags
+      };
+
+      if (status === 'approved') {
+        setUsedLedger((current) => ({ ...current, [parsed.code]: { firstValidatedAt: now, operator, gate: currentEvent.gate, eventId: currentEvent.id } }));
+      }
+      setHistory((current) => [entry, ...current].slice(0, 10));
+      setResult(entry);
+      setProcessing(false);
+      setDeskNote(recommendation);
+    } catch (error) {
+      console.error('Scanner verification failed:', error);
+      setProcessing(false);
+      setLocked(false);
+      Alert.alert('Verification failed', 'Unable to verify ticket at this time.');
+    }
   };
 
   const renderCamera = () => {

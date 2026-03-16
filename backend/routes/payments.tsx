@@ -421,7 +421,93 @@ router.get('/tickets/customer/:customerId', async (req, res) => {
   }
 });
 
-// Validate ticket (for scanner)
+// AI ticket verification (fraud-aware)
+router.post('/tickets/verify', async (req, res) => {
+  try {
+    const { ticket_code, event_id, validator_id, source } = req.body || {};
+    const ticketCode = String(ticket_code || '').trim();
+
+    if (!ticketCode) {
+      return res.json({ success: false, error: 'Ticket code is required', decision: { status: 'fraud', label: 'Missing ticket code', riskScore: 95, flags: ['Missing ticket code'] } });
+    }
+
+    const ticket = await dbOperations.get(
+      `SELECT t.*, e.event_name, e.start_date as event_date, e.location,
+              c.first_name, c.last_name
+       FROM tickets t
+       JOIN events e ON t.event_id = e.event_id
+       JOIN customers c ON t.customer_id = c.customer_id
+       WHERE t.ticket_code = ?`,
+      [ticketCode]
+    );
+
+    if (!ticket) {
+      return res.json({
+        success: false,
+        error: 'Ticket not found',
+        decision: { status: 'fraud', label: 'Ticket not found', riskScore: 98, flags: ['Ticket code not in registry'] }
+      });
+    }
+
+    const flags = [];
+    let status = 'approved';
+    let label = 'Entry approved';
+    let riskScore = 5;
+
+    if (ticket.ticket_status === 'VALIDATED') {
+      status = 'duplicate';
+      label = 'QR already used';
+      riskScore = 72;
+      flags.push('Ticket already validated');
+    }
+
+    if (ticket.ticket_status === 'CANCELLED' || ticket.ticket_status === 'REFUNDED') {
+      status = 'fraud';
+      label = 'Ticket invalidated';
+      riskScore = 90;
+      flags.push('Ticket cancelled/refunded');
+    }
+
+    if (event_id && String(event_id) !== String(ticket.event_id)) {
+      status = status === 'approved' ? 'review' : status;
+      label = status === 'review' ? 'Event mismatch' : label;
+      riskScore = Math.max(riskScore, 60);
+      flags.push('Event mismatch');
+    }
+
+    if (status === 'approved') {
+      await dbOperations.run(
+        'UPDATE tickets SET ticket_status = ?, validation_date = CURRENT_TIMESTAMP WHERE ticket_code = ?',
+        ['VALIDATED', ticketCode]
+      );
+    }
+
+    try {
+      await dbOperations.run(
+        `INSERT INTO ticket_scans (ticket_code, event_id, validator_id, source, status, scanned_at)
+         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [ticketCode, ticket.event_id, validator_id || null, source || 'scanner', status]
+      );
+    } catch (scanError) {
+      // table might not exist yet; ignore
+    }
+
+    return res.json({
+      success: status === 'approved',
+      ticket: {
+        ...ticket,
+        ticket_status: status === 'approved' ? 'VALIDATED' : ticket.ticket_status,
+        validation_date: status === 'approved' ? new Date() : ticket.validation_date,
+      },
+      decision: { status, label, riskScore, flags }
+    });
+  } catch (error) {
+    console.error('❌ Verification error:', error);
+    res.status(500).json({ success: false, error: 'Failed to verify ticket' });
+  }
+});
+
+// Validate ticket (legacy scanner)
 router.post('/tickets/:ticketCode/validate', async (req, res) => {
   try {
     const { ticketCode } = req.params;
