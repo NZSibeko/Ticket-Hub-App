@@ -5,9 +5,9 @@ import * as db from "./database";
 
 const NODE_ENV = String(process.env.NODE_ENV || 'development').toLowerCase();
 const IS_PRODUCTION = NODE_ENV === 'production';
-const ENABLE_DEV_SEED = process.env.ENABLE_DEV_SEED === 'true' || (!IS_PRODUCTION && process.env.ENABLE_DEV_SEED !== 'false');
-const ENABLE_TEST_USERS = process.env.ENABLE_TEST_USERS === 'true' || (!IS_PRODUCTION && process.env.ENABLE_TEST_USERS !== 'false');
-const ENABLE_DEFAULT_USERS = process.env.ENABLE_DEFAULT_USERS === 'true' || (!IS_PRODUCTION && process.env.ENABLE_DEFAULT_USERS !== 'false');
+const ENABLE_DEV_SEED = !IS_PRODUCTION && process.env.ENABLE_DEV_SEED === 'true';
+const ENABLE_TEST_USERS = !IS_PRODUCTION && process.env.ENABLE_TEST_USERS === 'true';
+const ENABLE_DEFAULT_USERS = !IS_PRODUCTION && process.env.ENABLE_DEFAULT_USERS === 'true';
 
 export const initializeDatabaseConnection = async () => {
   const connection = await db.connectDatabase();
@@ -119,7 +119,7 @@ const ensureDefaultCustomer = async (dbOperations) => {
 const ensureDefaultSupport = async (dbOperations) => {
   const existing = await dbOperations.get("SELECT * FROM support_staff WHERE email = ?", ["support@tickethub.co.za"]);
   if (!existing) {
-    const supportId = "support-demo-001";
+    const supportId = "support-001";
     const now = new Date().toISOString();
     const hashedPassword = await bcrypt.hash("support123", 10);
     await dbOperations.run(
@@ -193,8 +193,6 @@ export const runBootstrapTasks = async (dbOperations) => {
   await initializeTables(dbOperations);
   await createMissingMetricsTables(dbOperations);
   await ensureAllTables(dbOperations);
-  await ensureDefaultSupport(dbOperations);
-  await ensureDefaultOrganizer(dbOperations);
 
   if (ENABLE_DEFAULT_USERS) {
     await ensureDefaultEventManager(dbOperations);

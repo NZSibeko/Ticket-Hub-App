@@ -15,8 +15,9 @@ import {
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = getApiBaseUrlSync();
 
 const ROLES = [
   { value: 'customer', label: 'Customer', icon: 'person', color: '#2196F3' },

@@ -4,19 +4,19 @@ import React, { createContext, useContext, useEffect, useState, FC, ReactNode } 
 
 axios.defaults.withCredentials = true;
 
-const DEFAULT_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8081';
+const DEFAULT_API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  process.env.REACT_APP_API_URL ||
+  process.env.API_URL ||
+  '';
 let resolvedApiUrl: string | null = null;
 
 const getCandidateApiUrls = (): string[] => {
-  const fromEnv = process.env.REACT_APP_API_URL;
-  const urls = [
-    fromEnv,
-    'http://localhost:8081',
-    'http://localhost:8084',
-    'http://localhost:8083',
-    'http://localhost:8085',
-    'http://localhost:8082'
-  ].filter(Boolean) as string[];
+  const fromEnv =
+    process.env.EXPO_PUBLIC_API_URL ||
+    process.env.REACT_APP_API_URL ||
+    process.env.API_URL;
+  const urls = [fromEnv].filter(Boolean) as string[];
   return Array.from(new Set(urls));
 };
 

@@ -12,8 +12,9 @@ import { Camera } from 'expo-camera';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = getApiBaseUrlSync();
 
 const ScannerScreen = ({ navigation }) => {
   const [hasPermission, setHasPermission] = useState(null);
@@ -38,25 +39,26 @@ const ScannerScreen = ({ navigation }) => {
     try {
       const headers = getAuthHeader();
       const response = await axios.post(
-        `${API_URL}/api/tickets/${data}/validate`,
-        {},
+        `${API_URL}/api/payments/tickets/verify`,
+        { ticket_code: data, source: 'scanner' },
         { headers }
       );
 
       if (response.data.success) {
         const ticket = response.data.ticket;
         setTicketInfo(ticket);
-        
-        // Fetch event details
-        const eventResponse = await axios.get(
-          `${API_URL}/zi_events/${ticket.event_id}`,
-          { headers }
-        );
-        
-        setTicketInfo({
-          ...ticket,
-          event: eventResponse.data.d
-        });
+
+        if (ticket?.event_id) {
+          const eventResponse = await axios.get(
+            `${API_URL}/api/events/${ticket.event_id}`,
+            { headers }
+          );
+
+          setTicketInfo({
+            ...ticket,
+            event: eventResponse.data.event || eventResponse.data
+          });
+        }
       }
     } catch (error) {
       console.error('Validation error:', error);

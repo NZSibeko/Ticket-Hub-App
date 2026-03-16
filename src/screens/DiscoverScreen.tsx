@@ -15,9 +15,10 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 const { width } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
+const API_URL = getApiBaseUrlSync();
 
 const DiscoverScreen = ({ navigation }) => {
   const [events, setEvents] = useState([]);
@@ -44,7 +45,7 @@ const DiscoverScreen = ({ navigation }) => {
     try {
       const headers = await getAuthHeader();
       
-      const eventsResponse = await axios.get(`${API_URL}/zi_events`, { headers });
+      const eventsResponse = await axios.get(`${API_URL}/api/events/public`, { headers });
       const validatedEvents = eventsResponse.data.d.results.filter(
         e => e.event_status === 'VALIDATED'
       );

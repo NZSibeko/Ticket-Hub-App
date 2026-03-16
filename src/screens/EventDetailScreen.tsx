@@ -14,9 +14,10 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 const { width } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
+const API_URL = getApiBaseUrlSync();
 
 const EventDetailScreen = ({ route, navigation }) => {
   const { eventId, event: passedEvent } = route.params;
@@ -75,7 +76,7 @@ const EventDetailScreen = ({ route, navigation }) => {
       console.log('🔍 Fetching event details for:', eventId);
       
       const headers = getAuthHeader();
-      const response = await axios.get(`${API_URL}/zi_events/${eventId}`, { headers });
+      const response = await axios.get(`${API_URL}/api/events/${eventId}`, { headers });
       
       if (response.data && response.data.d) {
         console.log('📊 Full API Response:', JSON.stringify(response.data.d, null, 2));

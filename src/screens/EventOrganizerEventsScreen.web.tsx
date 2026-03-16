@@ -14,8 +14,9 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL = 'http://localhost:8081';
+const API_URL = getApiBaseUrlSync();
 const STATUS_FILTERS = ['ALL', 'VALIDATED', 'PENDING', 'DRAFT', 'REJECTED'];
 const COLORS = {
   primary: '#14213D',

@@ -14,9 +14,10 @@ import {
   View
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 const { width } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
+const API_URL = getApiBaseUrlSync();
 
 // Image pool for different event types
 const eventImages = {
@@ -85,7 +86,7 @@ const SearchEventsScreen = ({ navigation }) => {
   const fetchEvents = async () => {
     try {
       const headers = await getAuthHeader();
-      const response = await axios.get(`${API_URL}/zi_events`, { headers });
+      const response = await axios.get(`${API_URL}/api/events/public`, { headers });
       const events = response.data.d.results.filter(e => e.event_status === 'VALIDATED');
       setAllEvents(events);
     } catch (error) {

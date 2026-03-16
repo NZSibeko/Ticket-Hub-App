@@ -16,85 +16,6 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
-const API_URL = 'http://localhost:8081';
-
-// Mock Data
-const mockEvents = [
-  {
-    event_id: '1',
-    event_name: 'Summer Music Festival',
-    event_description: 'An amazing outdoor music festival with top artists',
-    location: 'Central Park, New York',
-    start_date: '2024-12-25T18:00:00Z',
-    end_date: '2024-12-25T23:00:00Z',
-    current_attendees: 450,
-    max_attendees: 500,
-    image_url: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=800&q=80',
-    price: 75,
-    ticket_types: [{ type: 'general', price: 75 }]
-  },
-  {
-    event_id: '2',
-    event_name: 'Cheap Eats Night Market',
-    event_description: 'Budget friendly food options.',
-    location: 'Downtown District',
-    start_date: '2024-11-08T19:30:00Z',
-    current_attendees: 180,
-    max_attendees: 300,
-    image_url: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80',
-    price: 15,
-    ticket_types: [{ type: 'general', price: 15 }]
-  },
-  {
-    event_id: '3',
-    event_name: 'Midnight Jazz Club',
-    event_description: 'Late night jazz sessions.',
-    location: 'Blue Note Jazz',
-    start_date: '2024-11-20T23:00:00Z',
-    current_attendees: 50,
-    max_attendees: 100,
-    image_url: 'https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=800&q=80',
-    price: 45,
-    ticket_types: [{ type: 'general', price: 45 }]
-  },
-  {
-    event_id: '4',
-    event_name: 'Weekend Tech Workshop',
-    event_description: 'Learn coding on Saturday.',
-    location: 'Tech Hub',
-    start_date: '2024-11-23T10:00:00Z',
-    current_attendees: 20,
-    max_attendees: 50,
-    image_url: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80',
-    price: 100,
-    ticket_types: [{ type: 'general', price: 100 }]
-  },
-  {
-    event_id: '5',
-    event_name: 'Comedy Gala',
-    event_description: 'Laugh out loud with top comedians.',
-    location: 'Laugh Factory',
-    start_date: '2024-12-05T20:00:00Z',
-    current_attendees: 380,
-    max_attendees: 400,
-    image_url: 'https://images.unsplash.com/photo-1585699324551-f6c309eedeca?w=800&q=80',
-    price: 60,
-    ticket_types: [{ type: 'general', price: 60 }]
-  },
-  {
-    event_id: '6',
-    event_name: 'Art Exhibition Opening',
-    event_description: 'Modern art showcase.',
-    location: 'City Gallery',
-    start_date: '2024-11-15T18:00:00Z',
-    current_attendees: 80,
-    max_attendees: 150,
-    image_url: 'https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=800&q=80',
-    price: 25,
-    ticket_types: [{ type: 'general', price: 25 }]
-  }
-];
-
 const storefrontImagePool = [
   'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1400&q=80',
   'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1400&q=80',
@@ -154,7 +75,7 @@ const SearchEventsScreen = ({ navigation, route }) => {
   const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
   const [activeQuickFilter, setActiveQuickFilter] = useState('all');
   const [sortMode, setSortMode] = useState('recommended');
-  const { getAuthHeader, hasAdminPrivileges } = useAuth();
+  const { hasAdminPrivileges, apiBaseUrl, getApiBaseUrl } = useAuth();
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -175,22 +96,30 @@ const SearchEventsScreen = ({ navigation, route }) => {
   useFocusEffect(
     useCallback(() => {
       fetchEvents();
-    }, [])
+    }, [apiBaseUrl, getApiBaseUrl])
   );
 
   const fetchEvents = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/events/public`);
+      const baseUrl =
+        apiBaseUrl || (typeof getApiBaseUrl === 'function' ? await getApiBaseUrl() : '');
+
+      if (!baseUrl) {
+        setAllEvents([]);
+        return;
+      }
+
+      const res = await fetch(`${baseUrl}/api/events/public`);
       const data = await res.json();
       
-      if (res.ok && data.success) {
-        setAllEvents(data.events); 
+      if (res.ok && data.success && Array.isArray(data.events)) {
+        setAllEvents(data.events);
       } else {
-        setAllEvents(mockEvents); 
+        setAllEvents([]);
       }
     } catch (err) {
-      console.log('Using mock data due to API error');
-      setAllEvents(mockEvents); 
+      console.error('Failed to load events:', err);
+      setAllEvents([]);
     } finally {
       setLoading(false);
     }

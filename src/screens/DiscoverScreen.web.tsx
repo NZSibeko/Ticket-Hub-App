@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import axios from 'axios';
 import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,14 +43,28 @@ const formatCompactNumber = (value) => {
   return `${amount}`;
 };
 
-const formatShortDate = (value) =>
-  new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const parseDate = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
 
-const formatDateTime = (value) =>
-  new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const formatShortDate = (value) => {
+  const parsed = parseDate(value);
+  return parsed ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD';
+};
 
-const formatTime = (value) =>
-  new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+const formatDateTime = (value) => {
+  const parsed = parseDate(value);
+  return parsed
+    ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Date TBD';
+};
+
+const formatTime = (value) => {
+  const parsed = parseDate(value);
+  return parsed ? parsed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Time TBD';
+};
 
 const getDemandRatio = (current, max) => {
   const safeMax = Number(max || 0);
@@ -68,173 +83,145 @@ const DiscoverScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('featured');
-  const { user } = useAuth();
+  const [events, setEvents] = useState([]);
+  const [apiError, setApiError] = useState(null);
+  const { user, apiBaseUrl, getApiBaseUrl } = useAuth();
 
-  const featuredEvents = [
-    {
-      id: 1,
-      title: 'Summer Music Festival',
-      description: 'A flagship outdoor music program with headline artists, premium hospitality, and large-format production.',
-      price: 299,
-      discountedPrice: 199,
-      discount: 33,
-      date: '2026-04-18T18:00:00Z',
-      location: 'Cape Town Stadium',
-      image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200',
-      category: 'Music',
-      tags: ['Trending', 'Verified'],
-      rating: 4.8,
-      current_attendees: 850,
-      max_attendees: 1200,
-    },
-    {
-      id: 2,
-      title: 'Tech Innovation Summit',
-      description: 'Executive demos, strategic networking, and commercial insight with regional technology leaders.',
-      price: 499,
-      discountedPrice: 349,
-      discount: 30,
-      date: '2026-05-14T09:00:00Z',
-      location: 'Sandton Convention Centre',
-      image: 'https://images.unsplash.com/photo-1535223289827-42f1e9919769?w=1200',
-      category: 'Technology',
-      tags: ['Early access', 'Limited seats'],
-      rating: 4.6,
-      current_attendees: 320,
-      max_attendees: 1000,
-    },
-    {
-      id: 3,
-      title: 'Jazz and Wine Evening',
-      description: 'An intimate premium program pairing tasting-led hospitality with acclaimed live jazz.',
-      price: 180,
-      discountedPrice: 120,
-      discount: 33,
-      date: '2026-06-05T19:30:00Z',
-      location: 'V&A Waterfront',
-      image: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=1200',
-      category: 'Music',
-      tags: ['Exclusive', 'Premium'],
-      rating: 4.9,
-      current_attendees: 145,
-      max_attendees: 250,
-    },
-  ];
+  const resolveApiBase = useCallback(async () => {
+    if (apiBaseUrl) return apiBaseUrl;
+    if (typeof getApiBaseUrl === 'function') {
+      const resolved = await getApiBaseUrl();
+      if (resolved) return resolved;
+    }
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+    return '';
+  }, [apiBaseUrl, getApiBaseUrl]);
 
-  const activeCompetitions = [
-    {
-      id: 1,
-      title: 'Win VIP Festival Passes',
-      description: 'A high-visibility audience campaign with VIP access and backstage hospitality.',
-      prize: 'R5,000 value',
-      entries: 1247,
-      endDate: '2026-03-25T23:59:00Z',
-      image: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=1200',
-      entryFee: 0,
-      timeLeft: '12 days left',
-      participants: '1.2K entered',
-      current_attendees: 1247,
-      max_attendees: 5000,
-    },
-    {
-      id: 2,
-      title: 'DJ Mix Competition',
-      description: 'Submit a commercial-ready mix for a live main-stage set and studio time.',
-      prize: 'R10,000 plus studio time',
-      entries: 893,
-      endDate: '2026-04-02T23:59:00Z',
-      image: 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=1200',
-      entryFee: 50,
-      timeLeft: '20 days left',
-      participants: '893 entered',
-      current_attendees: 893,
-      max_attendees: 2000,
-    },
-    {
-      id: 3,
-      title: 'Food Festival Experience',
-      description: 'A culinary rewards campaign for four guests with chef-hosted experiences.',
-      prize: 'R8,000 dining package',
-      entries: 567,
-      endDate: '2026-03-20T23:59:00Z',
-      image: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1200',
-      entryFee: 0,
-      timeLeft: '7 days left',
-      participants: '567 entered',
-      current_attendees: 567,
-      max_attendees: 1500,
-    },
-  ];
+  const fetchDiscoverData = useCallback(async () => {
+    try {
+      setApiError(null);
+      const apiBase = await resolveApiBase();
 
-  const categories = [
-    { id: 1, name: 'Music', icon: 'musical-notes', color: '#2563eb', events: 234 },
-    { id: 2, name: 'Sports', icon: 'basketball', color: '#dc2626', events: 156 },
-    { id: 3, name: 'Arts', icon: 'color-palette', color: '#7c3aed', events: 89 },
-    { id: 4, name: 'Food', icon: 'restaurant', color: '#d97706', events: 178 },
-    { id: 5, name: 'Tech', icon: 'hardware-chip', color: '#0891b2', events: 67 },
-    { id: 6, name: 'Comedy', icon: 'mic', color: '#059669', events: 45 },
-  ];
+      if (!apiBase) {
+        throw new Error('API base URL unavailable');
+      }
 
-  const trendingEvents = [
-    {
-      id: 1,
-      title: 'Jazz Night Under Stars',
-      location: 'Green Point Park',
-      price: 150,
-      image: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=900',
-      rating: 4.8,
-      date: '2026-03-29T19:00:00Z',
-      description: 'A high-demand open-air jazz program with premium lawn seating and curated hospitality.',
-      current_attendees: 2400,
-      max_attendees: 3000,
-      category: 'Music',
-      tags: ['Fast moving', 'City favorite'],
-    },
-    {
-      id: 2,
-      title: 'Food and Wine Expo',
-      location: 'CTICC',
-      price: 200,
-      image: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=900',
-      rating: 4.6,
-      date: '2026-04-26T11:00:00Z',
-      description: 'A premium food discovery program showcasing chefs, brands, and tasting-led experiences.',
-      current_attendees: 1800,
-      max_attendees: 2500,
-      category: 'Food',
-      tags: ['Premium tasting', 'Weekend'],
-    },
-    {
-      id: 3,
-      title: 'Comedy Night Special',
-      location: 'Baxter Theatre',
-      price: 120,
-      image: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=900',
-      rating: 4.9,
-      date: '2026-05-09T20:00:00Z',
-      description: 'A strong-performing comedy night featuring headliners and reserved premium seating.',
-      current_attendees: 1200,
-      max_attendees: 1500,
-      category: 'Comedy',
-      tags: ['High rating', 'Sold fast'],
-    },
-  ];
+      const response = await axios.get(`${apiBase}/api/events/public`, { timeout: 15000 });
+      const payload = response?.data?.events || response?.data?.data || response?.data || [];
+      setEvents(Array.isArray(payload) ? payload : []);
+    } catch (error) {
+      console.error('Failed to load discover data:', error);
+      setEvents([]);
+      setApiError('Unable to load live events right now.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [resolveApiBase]);
 
-  const heroEvent = featuredEvents[0];
-  const allEvents = [...featuredEvents, ...trendingEvents];
+  useFocusEffect(
+    useCallback(() => {
+      fetchDiscoverData();
+    }, [fetchDiscoverData])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchDiscoverData();
+  };
+
+  const normalizeEvent = (event) => {
+    const normalizedId =
+      event.event_id ??
+      event.id ??
+      `${event.event_name || event.title || 'event'}-${event.start_date || event.date || event.location || 'unknown'}`;
+    return {
+      id: normalizedId,
+      title: event.event_name || event.title || 'Event',
+      description: event.event_description || event.description || 'Event details will be available soon.',
+      price: Number(event.price ?? event.unit_price ?? 0),
+      date: event.start_date || event.date || event.created_at || null,
+      location: event.location || event.venue || 'Location TBD',
+      image: event.image_url || event.event_image || event.image || null,
+      category: event.category || event.event_category || 'General',
+      current_attendees: Number(event.current_attendees ?? event.attendees ?? 0),
+      max_attendees: Number(event.max_attendees ?? event.capacity ?? 0),
+    };
+  };
+
+  const normalizedEvents = events.map(normalizeEvent);
+  const activeCompetitions = [];
+
+  const sortedByDate = [...normalizedEvents].sort((left, right) => {
+    const leftDate = parseDate(left.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const rightDate = parseDate(right.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    return leftDate - rightDate;
+  });
+
+  const featuredEvents = sortedByDate.slice(0, 3);
+  const trendingEvents = [...normalizedEvents]
+    .sort((left, right) => getDemandRatio(right.current_attendees, right.max_attendees) - getDemandRatio(left.current_attendees, left.max_attendees))
+    .slice(0, 3);
+
+  const categoryCounts = normalizedEvents.reduce((acc, event) => {
+    const name = (event.category || 'General').trim();
+    acc[name] = (acc[name] || 0) + 1;
+    return acc;
+  }, {});
+
+  const categoryThemes = {
+    music: { icon: 'musical-notes', color: '#2563eb' },
+    sports: { icon: 'basketball', color: '#dc2626' },
+    arts: { icon: 'color-palette', color: '#7c3aed' },
+    food: { icon: 'restaurant', color: '#d97706' },
+    tech: { icon: 'hardware-chip', color: '#0891b2' },
+    comedy: { icon: 'mic', color: '#059669' },
+    general: { icon: 'apps', color: '#0f172a' },
+  };
+
+  const resolveCategoryTheme = (name) => {
+    const key = (name || '').toLowerCase();
+    if (key.includes('music')) return categoryThemes.music;
+    if (key.includes('sport')) return categoryThemes.sports;
+    if (key.includes('art')) return categoryThemes.arts;
+    if (key.includes('food')) return categoryThemes.food;
+    if (key.includes('tech')) return categoryThemes.tech;
+    if (key.includes('comedy')) return categoryThemes.comedy;
+    return categoryThemes.general;
+  };
+
+  const categories = Object.entries(categoryCounts)
+    .map(([name, count], index) => {
+      const theme = resolveCategoryTheme(name);
+      return {
+        id: `${name}-${index}`,
+        name,
+        icon: theme.icon,
+        color: theme.color,
+        events: count
+      };
+    })
+    .sort((left, right) => right.events - left.events);
+
+  const heroEvent = featuredEvents[0] || normalizedEvents[0] || null;
+  const allEvents = normalizedEvents;
   const totalSeats = allEvents.reduce((sum, event) => sum + Number(event.max_attendees || 0), 0);
   const totalDemand = allEvents.reduce((sum, event) => sum + Number(event.current_attendees || 0), 0);
-  const averageRating = (allEvents.reduce((sum, event) => sum + Number(event.rating || 0), 0) / allEvents.length).toFixed(1);
-  const maxCategoryVolume = Math.max(...categories.map((category) => category.events));
-  const highestDemandRatio = Math.max(...allEvents.map((event) => getDemandRatio(event.current_attendees, event.max_attendees)));
+  const averageFillRate = totalSeats ? Math.round((totalDemand / totalSeats) * 100) : 0;
+  const maxCategoryVolume = categories.length ? Math.max(...categories.map((category) => category.events)) : 0;
+  const highestDemandRatio = allEvents.length
+    ? Math.max(...allEvents.map((event) => getDemandRatio(event.current_attendees, event.max_attendees)))
+    : 0;
   const topDemandEvents = [...allEvents]
     .sort((left, right) => getDemandRatio(right.current_attendees, right.max_attendees) - getDemandRatio(left.current_attendees, left.max_attendees))
     .slice(0, 3);
 
   const summaryCards = [
-    { label: 'Verified listings', value: formatCompactNumber(allEvents.length), helper: 'Curated live inventory', icon: 'shield-checkmark-outline', iconBg: '#dbeafe', iconColor: '#2563eb' },
+    { label: 'Live events', value: formatCompactNumber(allEvents.length), helper: 'Validated inventory ready to book', icon: 'calendar-outline', iconBg: '#dbeafe', iconColor: '#2563eb' },
     { label: 'Seats in market', value: formatCompactNumber(totalSeats), helper: `${formatCompactNumber(totalDemand)} reserved now`, icon: 'people-outline', iconBg: '#ccfbf1', iconColor: '#0f766e' },
-    { label: 'Average rating', value: averageRating, helper: 'Marketplace trust signal', icon: 'star-outline', iconBg: '#ede9fe', iconColor: '#7c3aed' },
+    { label: 'Avg. fill rate', value: `${averageFillRate}%`, helper: 'Demand velocity across inventory', icon: 'pulse-outline', iconBg: '#ede9fe', iconColor: '#7c3aed' },
     { label: 'Prize campaigns', value: formatCompactNumber(activeCompetitions.length), helper: 'Growth-focused activations live', icon: 'gift-outline', iconBg: '#ffedd5', iconColor: '#c2410c' },
   ];
 
@@ -244,23 +231,6 @@ const DiscoverScreen = ({ navigation }) => {
     { id: 'categories', label: 'Categories', icon: 'grid-outline', helper: 'Portfolio coverage', count: categories.length },
     { id: 'trending', label: 'Trending', icon: 'trending-up-outline', helper: 'Demand signals', count: trendingEvents.length },
   ];
-
-  const fetchDiscoverData = (delay = 650) => setTimeout(() => {
-    setLoading(false);
-    setRefreshing(false);
-  }, delay);
-
-  useFocusEffect(
-    useCallback(() => {
-      const timeout = fetchDiscoverData();
-      return () => clearTimeout(timeout);
-    }, [])
-  );
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchDiscoverData(450);
-  };
 
   const SectionHeader = ({ eyebrow, title, subtitle, icon, iconColor = '#2563eb', iconBg = '#dbeafe', controls = null }) => (
     <View style={styles.sectionHeader}>
@@ -280,7 +250,11 @@ const DiscoverScreen = ({ navigation }) => {
 
   const EventCard = ({ event, showCategory = false, cardWidth = CAROUSEL_CARD_WIDTH }) => {
     const demandRatio = getDemandRatio(event.current_attendees, event.max_attendees);
-    const activePrice = event.discountedPrice || event.price || 0;
+    const activePrice = Number(event.price || 0);
+    const priceLabel = activePrice > 0 ? `From ${formatCurrency(activePrice)}` : 'Free entry';
+    const attendeeLabel = event.max_attendees
+      ? `${formatCompactNumber(event.current_attendees)} / ${formatCompactNumber(event.max_attendees)} reserved`
+      : `${formatCompactNumber(event.current_attendees)} reservations confirmed`;
 
     return (
       <TouchableOpacity
@@ -289,17 +263,18 @@ const DiscoverScreen = ({ navigation }) => {
         onPress={() => navigation.navigate('EventDetail', { eventId: event.id, event })}
       >
         <View style={styles.cardImageWrap}>
-          <Image source={{ uri: event.image }} style={styles.cardImage} resizeMode="cover" />
+          {event.image ? (
+            <Image source={{ uri: event.image }} style={styles.cardImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.cardImage, styles.cardImageFallback]}>
+              <Ionicons name="image-outline" size={32} color="#94a3b8" />
+            </View>
+          )}
           <View style={styles.cardImageOverlay} />
           <View style={styles.cardBadgeRow}>
             {showCategory && event.category ? (
               <View style={styles.badgeDark}>
                 <Text style={styles.badgeText}>{event.category}</Text>
-              </View>
-            ) : null}
-            {event.discount ? (
-              <View style={[styles.badgeDark, styles.badgeBlue]}>
-                <Text style={styles.badgeText}>{event.discount}% off</Text>
               </View>
             ) : null}
           </View>
@@ -312,10 +287,6 @@ const DiscoverScreen = ({ navigation }) => {
         <View style={styles.cardBody}>
           <View style={styles.cardTitleRow}>
             <Text style={styles.cardTitle} numberOfLines={2}>{event.title}</Text>
-            <View style={styles.ratingPill}>
-              <Ionicons name="star" size={12} color="#f59e0b" />
-              <Text style={styles.ratingText}>{event.rating?.toFixed(1) || '4.8'}</Text>
-            </View>
           </View>
           <Text style={styles.cardDescription} numberOfLines={2}>{event.description}</Text>
           <View style={styles.metaRow}>
@@ -338,10 +309,8 @@ const DiscoverScreen = ({ navigation }) => {
           </View>
           <View style={styles.cardFooter}>
             <View>
-              <Text style={styles.cardPrice}>From {formatCurrency(activePrice)}</Text>
-              <Text style={styles.cardPriceHelper}>
-                {event.discountedPrice ? `${formatCurrency(event.price)} standard rate` : `${formatCompactNumber(event.current_attendees)} reservations confirmed`}
-              </Text>
+              <Text style={styles.cardPrice}>{priceLabel}</Text>
+              <Text style={styles.cardPriceHelper}>{attendeeLabel}</Text>
             </View>
             <View style={styles.cardAction}>
               <Text style={styles.cardActionText}>Review</Text>
@@ -363,7 +332,13 @@ const DiscoverScreen = ({ navigation }) => {
         onPress={() => navigation.navigate('BrowseEvents', { discoveryMode: 'competitions' })}
       >
         <View style={styles.cardImageWrap}>
-          <Image source={{ uri: competition.image }} style={styles.cardImage} resizeMode="cover" />
+          {competition.image ? (
+            <Image source={{ uri: competition.image }} style={styles.cardImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.cardImage, styles.cardImageFallback]}>
+              <Ionicons name="trophy-outline" size={32} color="#94a3b8" />
+            </View>
+          )}
           <View style={styles.cardImageOverlay} />
           <View style={styles.cardBadgeRow}>
             <View style={styles.badgeDark}>
@@ -434,7 +409,19 @@ const DiscoverScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
-  const CollectionPanel = ({ eyebrow, title, subtitle, icon, iconColor, iconBg, items, renderItem, cardWidth = CAROUSEL_CARD_WIDTH }) => {
+  const CollectionPanel = ({
+    eyebrow,
+    title,
+    subtitle,
+    icon,
+    iconColor,
+    iconBg,
+    items,
+    renderItem,
+    cardWidth = CAROUSEL_CARD_WIDTH,
+    emptyTitle = 'No events available yet',
+    emptySubtitle = 'Once events are published, they will appear here.'
+  }) => {
     const scrollRef = useRef(null);
     const currentOffsetRef = useRef(0);
     const contentWidthRef = useRef(0);
@@ -485,7 +472,10 @@ const DiscoverScreen = ({ navigation }) => {
           ref={scrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.carouselContent}
+          contentContainerStyle={[
+            styles.carouselContent,
+            items.length === 0 && styles.carouselContentEmpty
+          ]}
           onContentSizeChange={(contentWidth) => {
             contentWidthRef.current = contentWidth;
             syncScrollState();
@@ -497,7 +487,19 @@ const DiscoverScreen = ({ navigation }) => {
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          {items.map((item) => renderItem(item))}
+          {items.length > 0 ? (
+            items.map((item) => renderItem(item))
+          ) : (
+            <View style={styles.emptyCollection}>
+              <View style={styles.emptyCollectionIcon}>
+                <Ionicons name="calendar-outline" size={22} color="#2563eb" />
+              </View>
+              <View style={styles.emptyCollectionCopy}>
+                <Text style={styles.emptyCollectionTitle}>{emptyTitle}</Text>
+                <Text style={styles.emptyCollectionSubtitle}>{emptySubtitle}</Text>
+              </View>
+            </View>
+          )}
         </ScrollView>
       </View>
     );
@@ -514,37 +516,49 @@ const DiscoverScreen = ({ navigation }) => {
         iconBg="#ede9fe"
       />
       <View style={styles.categoryGrid}>
-        {categories.map((category) => {
-          const share = Math.round((category.events / maxCategoryVolume) * 100);
+        {categories.length === 0 ? (
+          <View style={styles.emptyCategory}>
+            <View style={styles.emptyCollectionIcon}>
+              <Ionicons name="grid-outline" size={22} color="#7c3aed" />
+            </View>
+            <View style={styles.emptyCollectionCopy}>
+              <Text style={styles.emptyCollectionTitle}>No categories to show yet</Text>
+              <Text style={styles.emptyCollectionSubtitle}>Categories will appear once events are published.</Text>
+            </View>
+          </View>
+        ) : (
+          categories.map((category) => {
+            const share = maxCategoryVolume ? Math.round((category.events / maxCategoryVolume) * 100) : 0;
 
-          return (
-            <TouchableOpacity
-              key={category.id}
-              style={[styles.categoryCard, { width: CATEGORY_CARD_WIDTH }]}
-              activeOpacity={0.92}
-              onPress={() => navigation.navigate('BrowseEvents', { category: category.name })}
-            >
-              <View style={styles.categoryRow}>
-                <View style={[styles.categoryIcon, { backgroundColor: `${category.color}18` }]}>
-                  <Ionicons name={category.icon} size={22} color={category.color} />
+            return (
+              <TouchableOpacity
+                key={category.id}
+                style={[styles.categoryCard, { width: CATEGORY_CARD_WIDTH }]}
+                activeOpacity={0.92}
+                onPress={() => navigation.navigate('BrowseEvents', { category: category.name })}
+              >
+                <View style={styles.categoryRow}>
+                  <View style={[styles.categoryIcon, { backgroundColor: `${category.color}18` }]}>
+                    <Ionicons name={category.icon} size={22} color={category.color} />
+                  </View>
+                  <View style={[styles.categoryPill, { borderColor: `${category.color}30` }]}>
+                    <Text style={[styles.categoryPillText, { color: category.color }]}>{category.events} listings</Text>
+                  </View>
                 </View>
-                <View style={[styles.categoryPill, { borderColor: `${category.color}30` }]}>
-                  <Text style={[styles.categoryPillText, { color: category.color }]}>{category.events} listings</Text>
+                <Text style={styles.categoryTitle}>{category.name}</Text>
+                <Text style={styles.categoryDescription}>
+                  Commercially relevant experiences designed for premium discovery and stronger conversion.
+                </Text>
+                <View style={styles.categoryProgressRow}>
+                  <View style={styles.categoryProgressTrack}>
+                    <View style={[styles.categoryProgressFill, { width: `${Math.max(share, 10)}%`, backgroundColor: category.color }]} />
+                  </View>
+                  <Ionicons name="arrow-forward" size={16} color="#64748b" />
                 </View>
-              </View>
-              <Text style={styles.categoryTitle}>{category.name}</Text>
-              <Text style={styles.categoryDescription}>
-                Commercially relevant experiences designed for premium discovery and stronger conversion.
-              </Text>
-              <View style={styles.categoryProgressRow}>
-                <View style={styles.categoryProgressTrack}>
-                  <View style={[styles.categoryProgressFill, { width: `${Math.max(share, 10)}%`, backgroundColor: category.color }]} />
-                </View>
-                <Ionicons name="arrow-forward" size={16} color="#64748b" />
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+              </TouchableOpacity>
+            );
+          })
+        )}
       </View>
     </View>
   );
@@ -562,6 +576,8 @@ const DiscoverScreen = ({ navigation }) => {
             iconBg="#dbeafe"
             cardWidth={SECTION_FIT_CARD_WIDTH}
             items={featuredEvents}
+            emptyTitle={apiError ? 'Unable to load featured events' : 'No featured events yet'}
+            emptySubtitle={apiError || 'Once events are published, they will appear in this collection.'}
             renderItem={(event) => <EventCard key={`featured-${event.id}`} event={event} showCategory={true} cardWidth={SECTION_FIT_CARD_WIDTH} />}
           />
           <CollectionPanel
@@ -573,6 +589,8 @@ const DiscoverScreen = ({ navigation }) => {
             iconBg="#ccfbf1"
             cardWidth={SECTION_FIT_CARD_WIDTH}
             items={trendingEvents}
+            emptyTitle={apiError ? 'Unable to load demand signals' : 'No demand signals yet'}
+            emptySubtitle={apiError || 'Trending events will surface here once reservations start.'}
             renderItem={(event) => <EventCard key={`trending-${event.id}`} event={event} cardWidth={SECTION_FIT_CARD_WIDTH} />}
           />
         </>
@@ -589,6 +607,8 @@ const DiscoverScreen = ({ navigation }) => {
           iconColor="#c2410c"
           iconBg="#ffedd5"
           items={activeCompetitions}
+          emptyTitle="No campaigns available yet"
+          emptySubtitle="Campaign activations will appear here once they're scheduled."
           renderItem={(competition) => <CompetitionCard key={`competition-${competition.id}`} competition={competition} />}
         />
       );
@@ -608,6 +628,8 @@ const DiscoverScreen = ({ navigation }) => {
           iconBg="#ccfbf1"
           cardWidth={SECTION_FIT_CARD_WIDTH}
           items={trendingEvents}
+          emptyTitle={apiError ? 'Unable to load demand signals' : 'No demand signals yet'}
+          emptySubtitle={apiError || 'Trending events will surface here once reservations start.'}
           renderItem={(event) => <EventCard key={`trending-only-${event.id}`} event={event} cardWidth={SECTION_FIT_CARD_WIDTH} />}
         />
       );
@@ -659,33 +681,60 @@ const DiscoverScreen = ({ navigation }) => {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={styles.heroSpotlight}
-                activeOpacity={0.94}
-                onPress={() => navigation.navigate('EventDetail', { eventId: heroEvent.id, event: heroEvent })}
-              >
-                <Image source={{ uri: heroEvent.image }} style={styles.heroSpotlightImage} resizeMode="cover" />
-                <View style={styles.heroSpotlightOverlay} />
-                <View style={styles.heroSpotlightContent}>
-                  <View style={styles.heroSpotlightPill}>
-                    <Ionicons name="flash-outline" size={13} color="#f8fafc" />
-                    <Text style={styles.heroSpotlightPillText}>Featured release</Text>
+              {heroEvent ? (
+                <TouchableOpacity
+                  style={styles.heroSpotlight}
+                  activeOpacity={0.94}
+                  onPress={() => navigation.navigate('EventDetail', { eventId: heroEvent.id, event: heroEvent })}
+                >
+                  {heroEvent.image ? (
+                    <Image source={{ uri: heroEvent.image }} style={styles.heroSpotlightImage} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.heroSpotlightImage, styles.cardImageFallback]}>
+                      <Ionicons name="image-outline" size={34} color="#94a3b8" />
+                    </View>
+                  )}
+                  <View style={styles.heroSpotlightOverlay} />
+                  <View style={styles.heroSpotlightContent}>
+                    <View style={styles.heroSpotlightPill}>
+                      <Ionicons name="flash-outline" size={13} color="#f8fafc" />
+                      <Text style={styles.heroSpotlightPillText}>Featured release</Text>
+                    </View>
+                    <Text style={styles.heroSpotlightTitle} numberOfLines={2}>{heroEvent.title}</Text>
+                    <View style={styles.spotlightMeta}><Ionicons name="location-outline" size={14} color="#e2e8f0" /><Text style={styles.spotlightMetaText} numberOfLines={1}>{heroEvent.location}</Text></View>
+                    <View style={styles.spotlightMeta}><Ionicons name="calendar-outline" size={14} color="#e2e8f0" /><Text style={styles.spotlightMetaText}>{formatShortDate(heroEvent.date)} at {formatTime(heroEvent.date)}</Text></View>
+                    <View style={styles.heroSpotlightFooter}>
+                      <View>
+                        <Text style={styles.heroSpotlightPrice}>
+                          {heroEvent.price > 0 ? `From ${formatCurrency(heroEvent.price)}` : 'Free entry'}
+                        </Text>
+                        <Text style={styles.heroSpotlightHelper}>
+                          {heroEvent.max_attendees
+                            ? getDemandLabel(getDemandRatio(heroEvent.current_attendees, heroEvent.max_attendees))
+                            : 'Demand signal coming soon'}
+                        </Text>
+                      </View>
+                      <View style={styles.cardAction}>
+                        <Text style={styles.cardActionText}>View event</Text>
+                        <Ionicons name="arrow-forward" size={14} color="#ffffff" />
+                      </View>
+                    </View>
                   </View>
-                  <Text style={styles.heroSpotlightTitle} numberOfLines={2}>{heroEvent.title}</Text>
-                  <View style={styles.spotlightMeta}><Ionicons name="location-outline" size={14} color="#e2e8f0" /><Text style={styles.spotlightMetaText} numberOfLines={1}>{heroEvent.location}</Text></View>
-                  <View style={styles.spotlightMeta}><Ionicons name="calendar-outline" size={14} color="#e2e8f0" /><Text style={styles.spotlightMetaText}>{formatShortDate(heroEvent.date)} at {formatTime(heroEvent.date)}</Text></View>
-                  <View style={styles.heroSpotlightFooter}>
-                    <View>
-                      <Text style={styles.heroSpotlightPrice}>From {formatCurrency(heroEvent.discountedPrice || heroEvent.price)}</Text>
-                      <Text style={styles.heroSpotlightHelper}>{getDemandLabel(getDemandRatio(heroEvent.current_attendees, heroEvent.max_attendees))}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.heroSpotlight, styles.heroSpotlightEmpty]}>
+                  <View style={styles.heroSpotlightContent}>
+                    <View style={styles.heroSpotlightPill}>
+                      <Ionicons name="flash-outline" size={13} color="#f8fafc" />
+                      <Text style={styles.heroSpotlightPillText}>Featured release</Text>
                     </View>
-                    <View style={styles.cardAction}>
-                      <Text style={styles.cardActionText}>View event</Text>
-                      <Ionicons name="arrow-forward" size={14} color="#ffffff" />
-                    </View>
+                    <Text style={styles.heroSpotlightEmptyTitle}>No upcoming events yet</Text>
+                    <Text style={styles.heroSpotlightEmptySubtitle}>
+                      {apiError || 'Once events are published, your featured spotlight will appear here.'}
+                    </Text>
                   </View>
                 </View>
-              </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -708,7 +757,7 @@ const DiscoverScreen = ({ navigation }) => {
               <Text style={styles.workspaceTitle}>Category portfolio mix</Text>
               <Text style={styles.workspaceSubtitle}>The strongest verticals currently driving marketplace discovery and attention.</Text>
               {categories.slice(0, 4).map((category) => {
-                const share = Math.round((category.events / maxCategoryVolume) * 100);
+                const share = maxCategoryVolume ? Math.round((category.events / maxCategoryVolume) * 100) : 0;
                 return (
                   <TouchableOpacity key={category.id} style={styles.workspaceItem} activeOpacity={0.88} onPress={() => setActiveTab('categories')}>
                     <View style={styles.workspaceItemRow}>
@@ -850,12 +899,15 @@ const styles = StyleSheet.create({
   heroSecondaryButton: { minHeight: 48, paddingHorizontal: 18, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   heroSecondaryButtonText: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
   heroSpotlight: { flex: width >= 1040 ? 0.95 : undefined, minHeight: 360, borderRadius: 24, overflow: 'hidden', backgroundColor: '#1e293b', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  heroSpotlightEmpty: { justifyContent: 'center' },
   heroSpotlightImage: { ...StyleSheet.absoluteFillObject },
   heroSpotlightOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.28)' },
   heroSpotlightContent: { flex: 1, justifyContent: 'flex-end', padding: 18, backgroundColor: 'rgba(15,23,42,0.22)' },
   heroSpotlightPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: 'rgba(15,23,42,0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', marginBottom: 12 },
   heroSpotlightPillText: { fontSize: 11, fontWeight: '700', color: '#f8fafc' },
   heroSpotlightTitle: { fontSize: 24, lineHeight: 30, fontWeight: '800', color: '#ffffff', marginBottom: 12, letterSpacing: -0.4 },
+  heroSpotlightEmptyTitle: { fontSize: 22, lineHeight: 28, fontWeight: '800', color: '#ffffff', marginBottom: 8, letterSpacing: -0.3 },
+  heroSpotlightEmptySubtitle: { fontSize: 13, lineHeight: 19, color: '#cbd5e1' },
   spotlightMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
   spotlightMetaText: { flex: 1, fontSize: 13, lineHeight: 18, color: '#e2e8f0' },
   heroSpotlightFooter: { marginTop: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
@@ -911,13 +963,19 @@ const styles = StyleSheet.create({
   scrollControl: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#dbe4f3', alignItems: 'center', justifyContent: 'center' },
   scrollControlDisabled: { opacity: 0.45 },
   carouselContent: { gap: CAROUSEL_GAP },
+  carouselContentEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 18, minHeight: 220 },
+  emptyCollection: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
+  emptyCollectionIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff' },
+  emptyCollectionCopy: { flex: 1 },
+  emptyCollectionTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  emptyCollectionSubtitle: { marginTop: 4, fontSize: 12, lineHeight: 18, color: '#64748b' },
   collectionCard: { borderRadius: 20, borderWidth: 1, borderColor: '#dbe4f3', overflow: 'hidden', backgroundColor: '#ffffff', ...cardShadow },
   cardImageWrap: { position: 'relative', height: 220, backgroundColor: '#cbd5e1' },
   cardImage: { width: '100%', height: '100%' },
+  cardImageFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0' },
   cardImageOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.16)' },
   cardBadgeRow: { position: 'absolute', top: 14, left: 14, right: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   badgeDark: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(15,23,42,0.72)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  badgeBlue: { backgroundColor: 'rgba(37,99,235,0.88)' },
   badgeOrange: { backgroundColor: 'rgba(194,65,12,0.88)' },
   badgeText: { fontSize: 10, fontWeight: '800', color: '#ffffff', textTransform: 'uppercase', letterSpacing: 0.5 },
   datePill: { position: 'absolute', right: 14, bottom: 14, width: 54, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', paddingVertical: 8 },
@@ -946,6 +1004,7 @@ const styles = StyleSheet.create({
   cardAction: { minHeight: 40, borderRadius: 12, paddingHorizontal: 14, backgroundColor: '#0f172a', flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardActionText: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  emptyCategory: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   categoryCard: { borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc', padding: 16 },
   categoryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 },
   categoryIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

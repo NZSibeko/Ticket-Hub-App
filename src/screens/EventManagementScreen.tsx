@@ -15,8 +15,9 @@ import {
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = getApiBaseUrlSync();
 
 const getTicketTypeLabel = (type) => {
   const labels = {
@@ -55,7 +56,7 @@ const EventManagementScreen = ({ navigation }) => {
   const fetchEvents = async () => {
     try {
       const headers = getAuthHeader();
-      const response = await axios.get(`${API_URL}/zi_events`, { headers });
+      const response = await axios.get(`${API_URL}/api/events/manage/all`, { headers });
       // Ensure all events have ticket_types
       const eventsWithTicketTypes = response.data.d.results.map(event => {
         if (!event.ticket_types || event.ticket_types.length === 0) {

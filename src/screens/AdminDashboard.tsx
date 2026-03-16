@@ -18,9 +18,10 @@ import {
 } from "react-native";
 import ScreenContainer from "../components/ScreenContainer";
 import { useAuth } from "../context/AuthContext"; // Import IUser type
+import { getApiBaseUrlSync } from "../utils/apiBase";
 
 const { width } = Dimensions.get("window");
-const API_URL = "http://localhost:8082"; // Changed from 8081
+const API_URL = getApiBaseUrlSync();
 
 // Responsive scaling functions
 const scaleSize = (size: number): number => {

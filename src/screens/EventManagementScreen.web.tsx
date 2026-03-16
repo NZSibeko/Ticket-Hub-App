@@ -19,9 +19,10 @@ import {
   View,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 const { width, height } = Dimensions.get('window');
-const API_BASE_URL = 'http://localhost:8081';
+const API_BASE_URL = getApiBaseUrlSync();
 const EVENTS_CACHE_KEY = 'event_management_events_cache';
 const TOKEN_STORAGE_KEYS = ['userToken', 'token', 'authToken', 'adminToken'];
 const EVENT_CACHE_LIMIT = 60;

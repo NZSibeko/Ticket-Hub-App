@@ -3,8 +3,9 @@ import axios from 'axios';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL = 'http://localhost:8081';
+const API_URL = getApiBaseUrlSync();
 
 export default function OmniSupportOverviewScreen({ navigation }: any) {
   const { token, user, getUserId } = useAuth();

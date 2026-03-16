@@ -1,8 +1,9 @@
 // src/utils/api.js - NEW FILE FOR CENTRALIZED API CALLS
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import { getApiBaseUrlSync } from "./apiBase";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8081";
+const API_URL = getApiBaseUrlSync();
 
 // Create axios instance with default config
 const api = axios.create({

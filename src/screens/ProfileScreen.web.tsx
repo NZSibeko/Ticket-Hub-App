@@ -308,7 +308,7 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   const handleAddPaymentMethod = () => {
-    // Mock adding a new payment method
+    // Simulated add payment method
     const newPaymentMethod = {
       id: paymentMethods.length + 1,
       type: 'credit_card',
@@ -350,19 +350,19 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   const handleSaveProfile = () => {
-    // Mock save profile
+    // Simulated profile save
     Alert.alert('Success', 'Profile updated successfully!');
     handleBackToProfile();
   };
 
   const handleSaveNotifications = () => {
-    // Mock save notifications
+    // Simulated notifications save
     Alert.alert('Success', 'Notification settings updated!');
     handleBackToProfile();
   };
 
   const handleSavePrivacy = () => {
-    // Mock save privacy settings
+    // Simulated privacy settings save
     Alert.alert('Success', 'Privacy settings updated!');
     handleBackToProfile();
   };

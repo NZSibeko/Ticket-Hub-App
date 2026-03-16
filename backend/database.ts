@@ -728,9 +728,6 @@ class Database {
             // Create indexes
             await this.createIndexes();
             
-            // Insert default test data for support chat
-            await this.insertDefaultChatData();
-            
         } catch (error) {
             console.error('❌ Error creating tables:', error);
             throw error;
@@ -830,112 +827,6 @@ class Database {
             }
         } catch (error) {
             console.log('Note: Legacy schema reconciliation had issues:', error.message);
-        }
-    }
-
-    // Insert default chat data
-    async insertDefaultChatData() {
-        try {
-            // First, check if support_staff table exists
-            const supportStaffExists = await this.dbOperations.get(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='support_staff'"
-            );
-            
-            if (supportStaffExists) {
-                // Insert a default support staff member if none exist
-                const existingStaff = await this.dbOperations.get(
-                    "SELECT COUNT(*) as count FROM support_staff"
-                );
-                
-                if (existingStaff && existingStaff.count === 0) {
-                    const { v4: uuidv4 } = require('uuid');
-                    const bcrypt = require('bcrypt');
-                    const hashedPassword = await bcrypt.hash('support123', 10);
-                    const now = new Date().toISOString();
-                    
-                    await this.dbOperations.run(`
-                        INSERT INTO support_staff (support_id, name, email, username, password, phone, department, role, status, availability_status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    `, [
-                        'agent_001',
-                        'Support Agent 1',
-                        'agent1@tickethub.co.za',
-                        'agent1',
-                        hashedPassword,
-                        '+27711234567',
-                        'technical',
-                        'support',
-                        'active',
-                        'available',
-                        now,
-                        now
-                    ]);
-                    
-                    await this.dbOperations.run(`
-                        INSERT INTO support_staff (support_id, name, email, username, password, phone, department, role, status, availability_status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    `, [
-                        'agent_002',
-                        'Support Agent 2',
-                        'agent2@tickethub.co.za',
-                        'agent2',
-                        hashedPassword,
-                        '+27711234568',
-                        'customer_service',
-                        'support',
-                        'active',
-                        'available',
-                        now,
-                        now
-                    ]);
-                    
-                    console.log('✅ Default support staff created');
-                }
-            }
-            
-            // Now insert agent status
-            await this.dbOperations.run(`
-                INSERT OR IGNORE INTO support_agent_status (agent_id, status, auto_assign) 
-                VALUES 
-                    ('agent_001', 'available', 1),
-                    ('agent_002', 'available', 1)
-            `);
-
-            // Insert test conversations
-            await this.dbOperations.run(`
-                INSERT OR IGNORE INTO support_conversations (
-                    conversation_id, platform, customer_id, customer_name, 
-                    customer_phone, assigned_agent_id, status, created_at, 
-                    last_activity, last_message, last_message_time
-                ) VALUES 
-                    ('conv_whatsapp_001', 'whatsapp', 'cust_001', 'John WhatsApp', 
-                    '+27721234567', 'agent_001', 'active', datetime('now', '-1 hour'), 
-                    datetime('now', '-10 minutes'), 'Hello, I need help with my order', datetime('now', '-10 minutes')),
-                    
-                    ('conv_facebook_001', 'facebook', 'cust_002', 'Jane Facebook', 
-                    NULL, 'agent_001', 'active', datetime('now', '-2 hours'), 
-                    datetime('now', '-30 minutes'), 'When will my ticket arrive?', datetime('now', '-30 minutes'))
-            `);
-
-            // Insert test messages
-            await this.dbOperations.run(`
-                INSERT OR IGNORE INTO support_messages (
-                    message_id, conversation_id, sender_id, sender_name,
-                    sender_type, content, timestamp, platform, is_read, delivered
-                ) VALUES 
-                    ('msg_001', 'conv_whatsapp_001', 'cust_001', 'John WhatsApp', 
-                    'customer', 'Hello, I need help with my order', datetime('now', '-1 hour'), 'whatsapp', 1, 1),
-                    
-                    ('msg_002', 'conv_whatsapp_001', 'agent_001', 'Support Agent', 
-                    'support', 'Hi John! How can I help you today?', datetime('now', '-50 minutes'), 'whatsapp', 1, 1),
-                    
-                    ('msg_003', 'conv_whatsapp_001', 'cust_001', 'John WhatsApp', 
-                    'customer', 'My order #12345 hasn''t arrived yet', datetime('now', '-10 minutes'), 'whatsapp', 0, 1)
-            `);
-
-            console.log('✅ Default chat data inserted');
-        } catch (error) {
-            console.log('Note: Could not insert default chat data:', error.message);
         }
     }
 

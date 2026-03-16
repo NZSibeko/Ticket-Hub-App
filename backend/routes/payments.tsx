@@ -77,7 +77,7 @@ router.post('/create-payment-intent', async (req, res) => {
       });
     }
 
-    // TEST MODE: Skip Stripe, create mock payment intent
+    // TEST MODE: Skip Stripe, create a test payment intent
     if (TEST_MODE) {
       const paymentIntentId = `test_pi_${uuidv4()}`;
       const clientSecret = `test_secret_${uuidv4()}`;

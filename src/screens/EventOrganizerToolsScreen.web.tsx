@@ -15,8 +15,9 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL = 'http://localhost:8081';
+const API_URL = getApiBaseUrlSync();
 
 // Fallback theme context for web if ThemeContext doesn't exist
 const useTheme = () => {

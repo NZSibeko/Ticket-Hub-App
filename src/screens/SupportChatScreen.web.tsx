@@ -18,42 +18,16 @@ import {
   View
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 import webSocketManager from './websocket-connection';
 
-// Development configuration
-const USE_MOCK_DATA = false;
-const API_URL = 'http://localhost:8081';
-const WS_URL = 'ws://localhost:8081';
-
-// Mock data for development
-const MOCK_CONVERSATIONS = [
-  {
-    conversation_id: 'conv_1',
-    platform: 'whatsapp',
-    customer_name: 'John Doe',
-    customer_phone: '+1234567890',
-    status: 'active',
-    last_message: 'Hello, I need help with my order #12345',
-    last_message_time: new Date().toISOString(),
-    unread_count: 2
-  },
-  {
-    conversation_id: 'conv_2',
-    platform: 'facebook',
-    customer_name: 'Jane Smith',
-    customer_phone: '+1234567891',
-    status: 'active',
-    last_message: 'Can you help me with my ticket?',
-    last_message_time: new Date(Date.now() - 300000).toISOString(),
-    unread_count: 1
-  }
-];
+// Environment configuration
+const API_URL = getApiBaseUrlSync() || (typeof window !== 'undefined' ? window.location.origin : '');
+const WS_URL = API_URL.replace(/^http/, 'ws');
 
 // Helper function to get WebSocket URL
 const getWebSocketUrl = (token) => {
-  const baseUrl = 'ws://localhost:8081/ws';
-  
-  if (USE_MOCK_DATA) return null;
+  const baseUrl = `${WS_URL}/ws`;
   
   if (!token) {
     console.error('No authentication token available');
@@ -221,15 +195,6 @@ const SupportChatScreen = ({ navigation }) => {
     };
   }, []);
 
-  // Log development mode
-  useEffect(() => {
-    if (USE_MOCK_DATA) {
-      console.log('🧪 Development Mode: Using Mock Data');
-    } else {
-      console.log('🚀 Production Mode: Using Real Backend');
-    }
-  }, []);
-
   // Handle auth errors
   const handleAuthError = async (error) => {
     console.log('Auth error detected');
@@ -284,46 +249,6 @@ const SupportChatScreen = ({ navigation }) => {
     
     lastLoadTimeRef.current = now;
     
-    if (USE_MOCK_DATA) {
-      console.log('🧪 Using mock data');
-      setLoading(true);
-      
-      setTimeout(() => {
-        if (!isMountedRef.current) return;
-        
-        const filteredConvs = filterPlatform === 'all' 
-          ? MOCK_CONVERSATIONS 
-          : MOCK_CONVERSATIONS.filter(conv => conv.platform === filterPlatform);
-        
-        setConversations(filteredConvs);
-        
-        const grouped = filteredConvs.reduce((acc, conv) => {
-          const platform = conv.platform || 'other';
-          if (!acc[platform]) acc[platform] = [];
-          acc[platform].push(conv);
-          return acc;
-        }, {});
-        setGroupedConversations(grouped);
-        
-        const counts = {};
-        filteredConvs.forEach(conv => {
-          counts[conv.conversation_id] = conv.unread_count || 0;
-        });
-        setUnreadCounts(counts);
-
-        if (filteredConvs.length === 0) {
-          setActiveConversation(null);
-          setMessages([]);
-        }
-        
-        setIsInitialLoadComplete(true);
-        setLoading(false);
-        setRefreshing(false);
-        console.log(`✅ Mock conversations loaded: ${filteredConvs.length}`);
-      }, 800);
-      return;
-    }
-
     try {
       setLoading(true);
       setApiError(null);
@@ -423,7 +348,7 @@ const SupportChatScreen = ({ navigation }) => {
         console.log('⚠️ Endpoint not found');
         setApiError('API endpoint not found');
       } else {
-        console.log('🧪 Fallback to mock data');
+        console.log('🧪 Falling back to cached data');
         const filteredConvs = filterPlatform === 'all' 
           ? MOCK_CONVERSATIONS 
           : MOCK_CONVERSATIONS.filter(conv => conv.platform === filterPlatform);
@@ -480,12 +405,6 @@ const SupportChatScreen = ({ navigation }) => {
       return;
     }
     
-    if (USE_MOCK_DATA) {
-      console.log('Mock: Agent connected');
-      agentConnectSentRef.current = true;
-      return;
-    }
-    
     const wsManager = wsManagerRef.current;
     if (!wsManager) {
       console.log('❌ No WebSocket manager');
@@ -535,39 +454,6 @@ const SupportChatScreen = ({ navigation }) => {
     }
 
     console.log('🔌 Connecting to WebSocket...');
-    
-    if (USE_MOCK_DATA) {
-      console.log('🧪 Mock WebSocket');
-      setWsConnected(true);
-      setConnectionStatus('Connected (Mock)');
-      agentConnectSentRef.current = true;
-      
-      const mockInterval = setInterval(() => {
-        if (activeConversation && Math.random() > 0.8) {
-          const mockResponses = [
-            "Thanks for your help!",
-            "Can you check this?",
-            "When will this be ready?"
-          ];
-          const randomResponse = mockResponses[Math.floor(Math.random() * mockResponses.length)];
-          
-          handleNewMessage({
-            message_id: `mock_${Date.now()}`,
-            conversation_id: activeConversation.conversation_id,
-            sender_id: 'customer_mock',
-            sender_name: activeConversation.customer_name,
-            sender_type: 'customer',
-            content: randomResponse,
-            timestamp: new Date().toISOString(),
-            platform: activeConversation.platform,
-            is_read: false,
-            delivered: true
-          });
-        }
-      }, 15000);
-      
-      return () => clearInterval(mockInterval);
-    }
     
     console.log('🔄 Setting up REAL WebSocket...');
     
@@ -783,11 +669,6 @@ const SupportChatScreen = ({ navigation }) => {
 
   // Send WebSocket message
   const sendWebSocketMessage = (message) => {
-    if (USE_MOCK_DATA) {
-      console.log('📤 Mock WS:', message.type);
-      return true;
-    }
-    
     const wsManager = wsManagerRef.current;
     if (!wsManager) {
       console.warn('❌ No WebSocket manager');
@@ -857,55 +738,6 @@ const SupportChatScreen = ({ navigation }) => {
   const loadMessages = async (conv) => {
     console.log('📥 Loading messages:', conv.conversation_id);
     
-    if (USE_MOCK_DATA) {
-      console.log('🧪 Loading mock messages');
-      setLoading(true);
-      
-      setTimeout(() => {
-        if (!isMountedRef.current) return;
-        
-        const mockMessages = [
-          {
-            message_id: 'msg_1',
-            conversation_id: conv.conversation_id,
-            sender_id: conv.customer_phone || 'customer_1',
-            sender_name: conv.customer_name,
-            sender_type: 'customer',
-            content: conv.last_message || 'Hello, I need help',
-            timestamp: new Date(Date.now() - 300000).toISOString(),
-            platform: conv.platform,
-            is_read: true,
-            delivered: true
-          },
-          {
-            message_id: 'msg_2',
-            conversation_id: conv.conversation_id,
-            sender_id: userId || 'agent_1',
-            sender_name: `${user?.first_name || user?.name || 'Omni Support'} ${user?.last_name || 'Consultant'}`,
-            sender_type: 'support',
-            content: 'Hello! How can I help you today?',
-            timestamp: new Date(Date.now() - 150000).toISOString(),
-            platform: conv.platform,
-            is_read: true,
-            delivered: true
-          }
-        ];
-        
-        setMessages(mockMessages);
-        lastSelectedConversationIdRef.current = conv.conversation_id;
-        setActiveConversation({ ...conv, unread_count: 0 });
-        
-        setTimeout(() => {
-          if (flatListRef.current) {
-            flatListRef.current.scrollToEnd({ animated: true });
-          }
-        }, 100);
-        
-        setLoading(false);
-      }, 500);
-      return;
-    }
-
     try {
       setLoading(true);
       setApiError(null);
@@ -954,22 +786,7 @@ const SupportChatScreen = ({ navigation }) => {
       } else if (error.response?.status === 404) {
         setApiError('Messages endpoint not found');
       } else {
-        console.log('🧪 Using mock messages');
-        const mockMessages = [
-          {
-            message_id: 'msg_1',
-            conversation_id: conv.conversation_id,
-            sender_id: conv.customer_phone || 'customer_1',
-            sender_name: conv.customer_name,
-            sender_type: 'customer',
-            content: conv.last_message || 'Hello, I need help',
-            timestamp: new Date(Date.now() - 300000).toISOString(),
-            platform: conv.platform,
-            is_read: true,
-            delivered: true
-          }
-        ];
-        setMessages(mockMessages);
+        setMessages([]);
         lastSelectedConversationIdRef.current = conv.conversation_id;
         setActiveConversation({ ...conv, unread_count: 0 });
       }
@@ -1008,13 +825,6 @@ const SupportChatScreen = ({ navigation }) => {
   const loadAgentStatus = async () => {
     console.log('📡 Loading agent status...');
     
-    if (USE_MOCK_DATA) {
-      console.log('🧪 Mock agent status');
-      setAgentStatus('available');
-      setAutoAssign(true);
-      return;
-    }
-
     try {
       const response = await axios.get(`${API_URL}/api/support/agent-status`, { 
         headers: { 'Authorization': `Bearer ${token}` },
@@ -1115,11 +925,6 @@ const SupportChatScreen = ({ navigation }) => {
     console.log(`🔄 Changing agent status to: ${newStatus}`);
     setAgentStatus(newStatus);
     
-    if (USE_MOCK_DATA) {
-      console.log('🧪 Mock: Status changed to', newStatus);
-      return;
-    }
-    
     // Send status update via WebSocket
     sendWebSocketMessage({
       type: 'agent_status',
@@ -1164,8 +969,6 @@ const SupportChatScreen = ({ navigation }) => {
   const markAsRead = async (conversationId) => {
     updateUnreadCount(conversationId, 0);
     
-    if (USE_MOCK_DATA) return;
-
     try {
       await axios.post(
         `${API_URL}/api/support/conversations/${conversationId}/read`,
@@ -1205,12 +1008,6 @@ const SupportChatScreen = ({ navigation }) => {
           text: 'Resolve', 
           style: 'destructive',
           onPress: async () => {
-            if (USE_MOCK_DATA) {
-              setActiveConversation(prev => ({ ...prev, status: 'resolved' }));
-              loadConversations();
-              return;
-            }
-
             setResolving(true);
             
             try {
@@ -1265,12 +1062,6 @@ const SupportChatScreen = ({ navigation }) => {
         { 
           text: 'Reopen',
           onPress: async () => {
-            if (USE_MOCK_DATA) {
-              setActiveConversation(prev => ({ ...prev, status: 'active' }));
-              loadConversations();
-              return;
-            }
-
             setResolving(true);
             
             try {
@@ -1317,10 +1108,6 @@ const SupportChatScreen = ({ navigation }) => {
   const updateAgentStatus = async (newStatus) => {
     console.log(`🔄 Updating status via API to: ${newStatus}`);
     
-    if (USE_MOCK_DATA) {
-      return;
-    }
-    
     try {
       const response = await axios.put(
         `${API_URL}/api/support/agent-status`,
@@ -1343,8 +1130,6 @@ const SupportChatScreen = ({ navigation }) => {
     const newAutoAssign = !autoAssign;
     setAutoAssign(newAutoAssign);
     
-    if (USE_MOCK_DATA) return;
-    
     try {
       const response = await axios.put(
         `${API_URL}/api/support/agent-status`,
@@ -1366,13 +1151,6 @@ const SupportChatScreen = ({ navigation }) => {
 
   const handleReconnect = () => {
     if (!wsConnected) {
-      if (USE_MOCK_DATA) {
-        setWsConnected(true);
-        setConnectionStatus('Connected (Mock)');
-        Alert.alert('Reconnected', 'Successfully reconnected (Mock)');
-        return;
-      }
-      
       const wsManager = wsManagerRef.current;
       if (wsManager && wsManager.connect) {
         const wsUrl = token ? `${WS_URL}?token=${encodeURIComponent(token)}` : WS_URL;
@@ -1647,7 +1425,7 @@ const SupportChatScreen = ({ navigation }) => {
       helper: `${Number(liveStats.openTickets ?? 0)} open support tickets`,
       accent: Number(liveStats.urgentOpenTickets ?? 0) > 0 ? '#D97706' : '#0284C7',
       surface: Number(liveStats.urgentOpenTickets ?? 0) > 0 ? '#FEF3C7' : '#E0F2FE',
-      action: wsConnected || USE_MOCK_DATA
+      action: wsConnected
         ? {
             type: 'status',
             label: 'Review ticket load',
@@ -1984,9 +1762,9 @@ const SupportChatScreen = ({ navigation }) => {
         }
       ]
     : [];
-  const deliveryStatusMeta = wsConnected || USE_MOCK_DATA
+  const deliveryStatusMeta = wsConnected
     ? {
-        label: USE_MOCK_DATA ? 'Mock delivery online' : 'Realtime delivery online',
+        label: 'Realtime delivery online',
         helper: selectedConversationUnread > 0
           ? `${selectedConversationUnread} unread replies have already been pulled into the case review flow.`
           : 'This conversation is synchronized and ready for a response.',
@@ -1995,9 +1773,7 @@ const SupportChatScreen = ({ navigation }) => {
         action: {
           type: 'status',
           label: 'Review delivery status',
-          message: USE_MOCK_DATA
-            ? 'Mock delivery is active for this ticket workspace.'
-            : 'Realtime delivery is online for the active conversation.'
+          message: 'Realtime delivery is online for the active conversation.'
         }
       }
     : {
@@ -2309,7 +2085,6 @@ const SupportChatScreen = ({ navigation }) => {
       isSupport ? 'You' : 'Customer',
       isSupport && item.delivered ? 'Delivered' : null,
       item.message_id?.startsWith('wa_') ? 'WhatsApp' : null,
-      item.message_id?.startsWith('mock_') ? 'Preview data' : null,
       item.message_id?.startsWith('temp_') ? 'Sending' : null
     ].filter(Boolean).join(' - ');
     
@@ -2388,7 +2163,7 @@ const SupportChatScreen = ({ navigation }) => {
       >
         <View style={[styles.mainContainer, isCompactLayout && styles.mainContainerStack]}>
         {/* Connection Banner */}
-        {!wsConnected && !USE_MOCK_DATA && (
+        {!wsConnected && (
           <View style={styles.connectionBanner}>
             <View style={styles.connectionBannerContent}>
               <Ionicons name="wifi" size={16} color="#fff" />
@@ -2437,22 +2212,22 @@ const SupportChatScreen = ({ navigation }) => {
               <View
                 style={[
                   styles.signalPill,
-                  wsConnected || USE_MOCK_DATA ? styles.signalPillConnected : styles.signalPillDisconnected
+                  wsConnected ? styles.signalPillConnected : styles.signalPillDisconnected
                 ]}
               >
                 <View
                   style={[
                     styles.signalDot,
-                    { backgroundColor: wsConnected || USE_MOCK_DATA ? '#16A34A' : '#DC2626' }
+                    { backgroundColor: wsConnected ? '#16A34A' : '#DC2626' }
                   ]}
                 />
                 <Text
                   style={[
                     styles.signalPillText,
-                    !(wsConnected || USE_MOCK_DATA) && styles.signalPillTextDisconnected
+                    !wsConnected && styles.signalPillTextDisconnected
                   ]}
                 >
-                  {USE_MOCK_DATA ? 'Mock environment connected' : connectionStatus}
+                  {connectionStatus}
                 </Text>
               </View>
 
@@ -2549,7 +2324,7 @@ const SupportChatScreen = ({ navigation }) => {
                     </View>
                     <Text style={styles.emptyListTitle}>No conversations in queue</Text>
                     <Text style={styles.emptyListSubtitle}>
-                      {USE_MOCK_DATA ? 'Mock mode is active for workspace previews' : 'New customer threads will appear here in real time'}
+                      {'New customer threads will appear here in real time'}
                     </Text>
                   </View>
                 )}
@@ -3011,15 +2786,15 @@ const SupportChatScreen = ({ navigation }) => {
                         onSubmitEditing={sendMessage}
                         multiline
                         maxLength={1000}
-                        editable={wsConnected || USE_MOCK_DATA}
+                        editable={wsConnected}
                       />
                       <TouchableOpacity
                         onPress={sendMessage}
                         style={[
                           styles.sendBtn,
-                          (!newMessage.trim() || (!wsConnected && !USE_MOCK_DATA) || sending) && styles.sendBtnDisabled
+                          (!newMessage.trim() || !wsConnected || sending) && styles.sendBtnDisabled
                         ]}
-                        disabled={!newMessage.trim() || (!wsConnected && !USE_MOCK_DATA) || sending}
+                        disabled={!newMessage.trim() || !wsConnected || sending}
                       >
                         {sending ? (
                           <ActivityIndicator size="small" color="#fff" />
@@ -3103,7 +2878,7 @@ const SupportChatScreen = ({ navigation }) => {
                   onPress={() => runWorkspaceAction(deliveryStatusMeta.action)}
                 >
                   <Ionicons
-                    name={wsConnected || USE_MOCK_DATA ? 'checkmark-circle-outline' : 'refresh'}
+                    name={wsConnected ? 'checkmark-circle-outline' : 'refresh'}
                     size={18}
                     color="#6366F1"
                   />
@@ -3165,7 +2940,7 @@ const SupportChatScreen = ({ navigation }) => {
                   >
                     <View style={[styles.emptyStateActionIconWrap, { backgroundColor: deliveryStatusMeta.surface }]}>
                       <Ionicons
-                        name={wsConnected || USE_MOCK_DATA ? 'radio' : 'refresh-circle'}
+                        name={wsConnected ? 'radio' : 'refresh-circle'}
                         size={18}
                         color={deliveryStatusMeta.color}
                       />

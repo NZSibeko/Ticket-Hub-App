@@ -3,8 +3,9 @@ import axios from 'axios';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
-const API_URL = 'http://localhost:8081';
+const API_URL = getApiBaseUrlSync();
 
 type TaskItem = { id: string | number; title?: string; status?: string; priority?: string; due_at?: string | null; created_at?: string | null };
 const parseDate = (value?: string | null) => (value ? new Date(value) : null);

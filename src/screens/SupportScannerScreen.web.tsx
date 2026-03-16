@@ -14,9 +14,10 @@ import {
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
+import { getApiBaseUrlSync } from '../utils/apiBase';
 
 const { width } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
+const API_URL = getApiBaseUrlSync();
 
 const SupportScannerScreen = ({ navigation }) => {
   const [permission, requestPermission] = useCameraPermissions();
@@ -81,14 +82,15 @@ const SupportScannerScreen = ({ navigation }) => {
       
       // Validate ticket for this specific event
       const response = await fetch(
-        `${API_URL}/api/support/tickets/validate`,
+        `${API_URL}/api/payments/tickets/verify`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...headers },
           body: JSON.stringify({
             ticket_code: data,
             event_id: eventInfo.event_id,
-            validator_id: user.user_id
+            validator_id: user.user_id,
+            source: 'support'
           })
         }
       );
@@ -97,9 +99,10 @@ const SupportScannerScreen = ({ navigation }) => {
       
       setTimeout(() => {
         if (result.success) {
+          const decision = result.decision?.label || 'Ticket approved';
           Alert.alert(
-            'Ticket Validated!',
-            `Ticket ${data} has been successfully validated for ${eventInfo.event_name}.`,
+            'Ticket Verified',
+            `${decision} for ${eventInfo.event_name}.`,
             [{ text: 'OK', onPress: () => {
               setScanned(false);
               setShowResultModal(false);
