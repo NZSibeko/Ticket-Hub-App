@@ -126,17 +126,6 @@ console.debug = (...args) => {
 
 // --- All Function Definitions (Must be defined before use) ---
 
-function generateTrendData(points) {
-  const data = [];
-  let value = Math.floor(Math.random() * 500) + 500;
-  for (let i = 0; i < points; i++) {
-    const change = Math.floor(Math.random() * 200) - 100;
-    value = Math.max(100, value + change);
-    data.push(value);
-  }
-  return value;
-}
-
 // === DATABASE INITIALIZATION & SETUP ===
 
 const NGROK_URL = "https://hysteretic-susann-struthious.ngrok-free.dev";
@@ -255,37 +244,6 @@ function broadcastToDashboard(message) {
   });
   return broadcastCount;
 }
-
-function generateTrendData(points) {
-  const data = [];
-  let value = Math.floor(Math.random() * 500) + 500;
-  for (let i = 0; i < points; i++) {
-    const change = Math.floor(Math.random() * 200) - 100;
-    value = Math.max(100, value + change);
-    data.push(value);
-  }
-  return value;
-}
-
-setInterval(() => {
-  broadcastToDashboard({
-    type: "metrics_update",
-    data: {
-      timestamp: new Date().toISOString(),
-      metrics: {
-        liveAttendees: Math.floor(Math.random() * 500) + 100,
-        ticketsScannedLastHour: Math.floor(Math.random() * 100) + 50,
-        activeEventsRightNow: Math.floor(Math.random() * 10) + 5,
-        revenueThisHour: Math.floor(Math.random() * 50000) + 10000,
-        conversionRate: (Math.random() * 5 + 2).toFixed(1),
-        avgTicketPrice: Math.floor(Math.random() * 500) + 500,
-        customerSatisfaction: Math.floor(Math.random() * 20) + 80,
-        scanRate: Math.floor(Math.random() * 20) + 75,
-      },
-      period: "realtime",
-    },
-  });
-}, 5000);
 
 setInterval(() => {
   wss.clients.forEach((client) => {
@@ -873,7 +831,7 @@ async function mountRoutes() {
   try {
     const adminAuthRoutes = await loadModule("./routes/auth/adminAuth.tsx");
     app.use("/api/admin", adminAuthRoutes);
-    console.log("✓ Admin auth routes loaded (including demo-login)");
+    console.log("✓ Admin auth routes loaded");
   } catch (error) {
     console.log("⚠ Admin auth routes not available:", error.message);
   }
@@ -1036,22 +994,26 @@ async function mountRoutes() {
     console.log("⚠ WhatsApp webhook routes not available:", error.message);
   }
 
-  // Debug Routes
-  try {
-    const metricsDebugRoutes = await loadModule("./routes/metricsDebug.tsx");
-    app.use("/api/debug", metricsDebugRoutes);
-    console.log("✓ Debug routes loaded");
-  } catch (error) {
-    console.log("⚠ Debug routes not available:", error.message);
-  }
+  if (!IS_PRODUCTION) {
+    // Debug Routes
+    try {
+      const metricsDebugRoutes = await loadModule("./routes/metricsDebug.tsx");
+      app.use("/api/debug", metricsDebugRoutes);
+      console.log("✓ Debug routes loaded");
+    } catch (error) {
+      console.log("⚠ Debug routes not available:", error.message);
+    }
 
-  // Test Routes
-  try {
-    const debugRoutes = await loadModule("./routes/debug.tsx");
-    app.use("/api/test", debugRoutes);
-    console.log("✓ Test routes loaded");
-  } catch (error) {
-    console.log("⚠ Test routes not available:", error.message);
+    // Test Routes
+    try {
+      const debugRoutes = await loadModule("./routes/debug.tsx");
+      app.use("/api/test", debugRoutes);
+      console.log("✓ Test routes loaded");
+    } catch (error) {
+      console.log("⚠ Test routes not available:", error.message);
+    }
+  } else {
+    console.log("Debug/test routes disabled in production");
   }
 
   // Support Chat Routes (from initial read)
@@ -1254,9 +1216,6 @@ app.use((err, req, res, next) => {
       `   Dashboard WebSocket: ws://localhost:${activePort}/ws/dashboard`,
     );
     console.log(`   Health Check: http://localhost:${activePort}/health`);
-    console.log(
-      `   Demo Login: POST http://localhost:${activePort}/api/admin/demo-login`,
-    );
     console.log("============================================\n");
 
     markStartupStage("metrics-init");

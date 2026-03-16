@@ -89,10 +89,10 @@ router.get('/dashboard/stats', authenticateToken, async (req, res) => {
     const dbOperations = getDb();
     
     if (!dbOperations) {
-      return res.json({
-        success: true,
-        stats: getMockStats(),
-        message: 'Using mock data (database not available)'
+      return res.status(503).json({
+        success: false,
+        error: 'Database unavailable',
+        message: 'Dashboard statistics cannot be retrieved without a database connection.'
       });
     }
 
@@ -173,10 +173,10 @@ router.get('/dashboard/stats', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ [ADMIN API] Error fetching dashboard stats:', error);
-    res.json({
-      success: true,
-      stats: getMockStats(),
-      message: 'Using mock data due to error: ' + error.message
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch dashboard statistics',
+      details: error.message
     });
   }
 });
@@ -188,10 +188,10 @@ router.get('/users/dashboard', authenticateToken, async (req, res) => {
     const dbOperations = getDb();
     
     if (!dbOperations) {
-      return res.json({
-        success: true,
-        users: getMockUsers(),
-        message: 'Using mock data (database not available)'
+      return res.status(503).json({
+        success: false,
+        error: 'Database unavailable',
+        message: 'User dashboard data cannot be retrieved without a database connection.'
       });
     }
 
@@ -261,10 +261,10 @@ router.get('/users/dashboard', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ [ADMIN API] Error fetching user dashboard:', error);
-    res.json({
-      success: true,
-      users: getMockUsers(),
-      message: 'Using mock data due to error'
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user dashboard data',
+      details: error.message
     });
   }
 });
@@ -339,72 +339,5 @@ router.post('/quick-action', authenticateToken, async (req, res) => {
     });
   }
 });
-
-// Mock data functions
-function getMockStats() {
-  return {
-    events: {
-      total: 42,
-      validated: 35,
-      pending: 5,
-      archived: 2
-    },
-    users: {
-      total: 156,
-      admins: 3,
-      managers: 8,
-      organizers: 12,
-      support: 5,
-      customers: 128
-    },
-    tickets: {
-      total: 284,
-      revenue: 12560.50,
-      formattedRevenue: '$12,560.50'
-    }
-  };
-}
-
-function getMockUsers() {
-  const mockUsers = [];
-  const roles = [
-    { role: 'admin', display: 'Administrator' },
-    { role: 'manager', display: 'Manager' },
-    { role: 'event_organizer', display: 'Event Organizer' },
-    { role: 'omni_support_consultant', display: 'Omni Support Consultant' },
-    { role: 'event_support_consultant', display: 'Event Support Consultant' },
-    { role: 'customer', display: 'Customer' }
-  ];
-  
-  const names = ['John Doe', 'Jane Smith', 'Bob Johnson', 'Alice Williams', 
-                 'Charlie Brown', 'David Wilson', 'Eva Davis', 'Frank Miller'];
-  
-  for (let i = 0; i < 25; i++) {
-    const roleIndex = i % roles.length;
-    const nameIndex = i % names.length;
-    
-    mockUsers.push({
-      id: i + 1,
-      name: names[nameIndex],
-      email: `${names[nameIndex].toLowerCase().replace(' ', '.')}${i}@example.com`,
-      role: roles[roleIndex].role,
-      role_display: roles[roleIndex].display,
-      created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
-    });
-  }
-  
-  return {
-    all: mockUsers,
-    counts: {
-      total: mockUsers.length,
-      admins: mockUsers.filter(u => u.role === 'admin').length,
-      managers: mockUsers.filter(u => u.role === 'manager').length,
-      organizers: mockUsers.filter(u => u.role === 'event_organizer').length,
-      support: mockUsers.filter(u => u.role === 'omni_support_consultant' || u.role === 'event_support_consultant').length,
-      customers: mockUsers.filter(u => u.role === 'customer').length
-    },
-    recent: mockUsers.slice(0, 10)
-  };
-}
 
 module.exports = router;

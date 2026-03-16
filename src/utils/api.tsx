@@ -133,12 +133,6 @@ export const authAPI = {
 
   adminLogin: (email, password) =>
     api.post("/api/admin/auth/login", { email, password }),
-
-  demoLogin: () =>
-    api.post("/api/admin/demo-login", {
-      email: "admin@tickethub.co.za",
-      password: "admin123",
-    }),
 };
 
 export const supportAPI = {

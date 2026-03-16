@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_your_key_here');
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecret ? require('stripe')(stripeSecret) : null;
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const { dbOperations } = require('../database');
 
-// Check if we're in test mode - DEFAULT TO TRUE if not set
-const TEST_MODE = process.env.PAYMENT_TEST_MODE !== 'false';
+const NODE_ENV = String(process.env.NODE_ENV || 'development').toLowerCase();
+const IS_PRODUCTION = NODE_ENV === 'production';
+// Enable test mode only when explicitly requested and not in production.
+const TEST_MODE = !IS_PRODUCTION && String(process.env.PAYMENT_TEST_MODE || '').toLowerCase() === 'true';
 
 console.log(`💳 Payment system initialized in ${TEST_MODE ? 'TEST' : 'PRODUCTION'} mode`);
 
@@ -94,6 +97,13 @@ router.post('/create-payment-intent', async (req, res) => {
       });
     }
 
+    if (!stripe) {
+      return res.status(500).json({
+        error: 'Stripe is not configured',
+        details: 'Set STRIPE_SECRET_KEY to process live payments.'
+      });
+    }
+
     // PRODUCTION MODE: Use real Stripe
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
@@ -151,6 +161,12 @@ router.post('/confirm-payment', async (req, res) => {
       await new Promise(resolve => setTimeout(resolve, 1000));
     } else {
       // PRODUCTION MODE: Verify payment with Stripe
+      if (!stripe) {
+        return res.status(500).json({
+          error: 'Stripe is not configured',
+          details: 'Set STRIPE_SECRET_KEY to verify payments.'
+        });
+      }
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         if (paymentIntent.status !== 'succeeded') {
@@ -473,6 +489,12 @@ router.post('/refund', async (req, res) => {
     if (TEST_MODE) {
       console.log('✅ TEST MODE: Simulating refund...');
     } else {
+      if (!stripe) {
+        return res.status(500).json({
+          error: 'Stripe is not configured',
+          details: 'Set STRIPE_SECRET_KEY to process refunds.'
+        });
+      }
       const refund = await stripe.refunds.create({
         payment_intent: ticket.payment_id
       });

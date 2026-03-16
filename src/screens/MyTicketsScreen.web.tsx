@@ -27,7 +27,6 @@ import {
 
 const { width } = Dimensions.get('window');
 
-const API_URL = 'http://localhost:3000';
 const PAGE_MAX_WIDTH = 1320;
 const PAGE_PADDING = width >= 1280 ? 32 : width >= 768 ? 24 : 16;
 const HERO_PADDING = width >= 980 ? 28 : 20;
@@ -43,15 +42,6 @@ const cardShadow = Platform.select({
     elevation: 2,
   },
 });
-
-const mockTickets = [
-  { ticket_id: '1', ticket_code: 'TKT-001-ABC-123', event_name: 'Summer Music Festival', event_date: '2026-04-18T18:00:00Z', location: 'Cape Town Stadium', ticket_type: 'vip', price: 299, currency: 'ZAR', ticket_status: 'ACTIVE', purchase_date: '2026-02-01T10:30:00Z', image_url: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200', venue: 'Main Stage', organizer: 'EventHub Productions', current_attendees: 850, max_attendees: 1200 },
-  { ticket_id: '2', ticket_code: 'TKT-002-XYZ-789', event_name: 'Tech Innovation Summit', event_date: '2026-05-14T09:00:00Z', location: 'Sandton Convention Centre', ticket_type: 'general', price: 199, currency: 'ZAR', ticket_status: 'ACTIVE', purchase_date: '2026-02-12T14:15:00Z', image_url: 'https://images.unsplash.com/photo-1535223289827-42f1e9919769?w=1200', venue: 'Grand Ballroom', organizer: 'Tech Events SA', current_attendees: 320, max_attendees: 1000 },
-  { ticket_id: '3', ticket_code: 'TKT-003-DEF-456', event_name: 'Jazz and Wine Evening', event_date: '2026-06-05T19:30:00Z', location: 'V&A Waterfront', ticket_type: 'premium', price: 180, currency: 'ZAR', ticket_status: 'ACTIVE', purchase_date: '2026-02-18T16:20:00Z', image_url: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=1200', venue: 'Harbor View Lounge', organizer: 'Jazz Nights Co.', current_attendees: 180, max_attendees: 250 },
-  { ticket_id: '4', ticket_code: 'TKT-004-GHI-789', event_name: 'Food and Wine Expo', event_date: '2026-07-26T11:00:00Z', location: 'CTICC', ticket_type: 'vip', price: 250, currency: 'ZAR', ticket_status: 'ACTIVE', purchase_date: '2026-02-24T09:15:00Z', image_url: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1200', venue: 'Exhibition Hall A', organizer: 'Culinary Experiences', current_attendees: 280, max_attendees: 800 },
-  { ticket_id: '5', ticket_code: 'TKT-005-JKL-012', event_name: 'Art Exhibition Opening', event_date: '2026-01-05T18:00:00Z', location: 'Modern Art Museum', ticket_type: 'premium', price: 145, currency: 'ZAR', ticket_status: 'VALIDATED', purchase_date: '2025-12-12T11:20:00Z', image_url: 'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=1200', venue: 'Gallery Hall', organizer: 'Art Collective', current_attendees: 175, max_attendees: 200 },
-  { ticket_id: '6', ticket_code: 'TKT-006-MNO-345', event_name: 'Design Leadership Forum', event_date: '2026-04-28T08:00:00Z', location: 'Johannesburg Design Center', ticket_type: 'premium', price: 195, currency: 'ZAR', ticket_status: 'CANCELLED', purchase_date: '2026-02-22T13:10:00Z', image_url: 'https://images.unsplash.com/photo-1511578314322-379afb476865?w=1200', venue: 'Forum Hall', organizer: 'Creative Systems SA', current_attendees: 410, max_attendees: 700 },
-];
 
 const formatCurrency = (value) => `R${Number(value || 0).toLocaleString('en-ZA')}`;
 const formatDate = (value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -161,7 +151,7 @@ const TicketCard = ({ ticket, onOpenQR, onShare }) => {
 };
 
 const MyTicketsScreen = ({ navigation, route }) => {
-  const { user, getAuthHeader, getApiBaseUrl } = useAuth();
+  const { user, getAuthHeader, getApiBaseUrl, apiBaseUrl } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -181,31 +171,32 @@ const MyTicketsScreen = ({ navigation, route }) => {
     try {
       const purchasedTickets = await getStoredPurchasedTicketsForUser(user);
       const headers = typeof getAuthHeader === 'function' ? await getAuthHeader() : {};
-      const baseUrl = typeof getApiBaseUrl === 'function' ? await getApiBaseUrl() : API_URL;
+      const baseUrl =
+        apiBaseUrl || (typeof getApiBaseUrl === 'function' ? await getApiBaseUrl() : '');
       const customerId = user.customer_id || user.id;
-      if (!customerId) {
-        setTickets(mergeTicketCollections(mockTickets, purchasedTickets));
+      if (!customerId || !baseUrl) {
+        setTickets(purchasedTickets);
         setApiError(true);
         return;
       }
       const response = await axios.get(`${baseUrl}/api/payments/tickets/customer/${customerId}`, { headers, timeout: 5000 });
-      if (response?.data?.tickets?.length) {
-        setTickets(mergeTicketCollections(response.data.tickets, purchasedTickets));
-        setApiError(false);
-      } else {
-        setTickets(mergeTicketCollections(mockTickets, purchasedTickets));
-        setApiError(false);
-      }
+      const apiTickets = Array.isArray(response?.data?.tickets)
+        ? response.data.tickets
+        : Array.isArray(response?.data)
+          ? response.data
+          : [];
+      setTickets(mergeTicketCollections(apiTickets, purchasedTickets));
+      setApiError(false);
     } catch (error) {
       console.error('Error fetching tickets:', error);
       const purchasedTickets = await getStoredPurchasedTicketsForUser(user);
-      setTickets(mergeTicketCollections(mockTickets, purchasedTickets));
+      setTickets(purchasedTickets);
       setApiError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [getApiBaseUrl, getAuthHeader, user]);
+  }, [apiBaseUrl, getApiBaseUrl, getAuthHeader, user]);
 
   useFocusEffect(useCallback(() => {
     setLoading(true);
@@ -438,7 +429,7 @@ const MyTicketsScreen = ({ navigation, route }) => {
           {apiError ? (
             <View style={styles.noticeBanner}>
               <Ionicons name="information-circle-outline" size={16} color="#92400e" />
-              <Text style={styles.noticeBannerText}>Live sync is unavailable right now. Sample ticket data is being shown in this workspace.</Text>
+              <Text style={styles.noticeBannerText}>Live sync is unavailable right now. Showing saved tickets only.</Text>
             </View>
           ) : null}
 

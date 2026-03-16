@@ -2,7 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-const API_URL = 'http://localhost:8081';
+const API_URL =
+  (typeof process !== 'undefined' && process.env.REACT_APP_API_URL) ||
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081');
+const getWsBaseUrl = (baseUrl) => baseUrl.replace(/^http/, 'ws');
 
 // Add Tailwind CDN
 if (typeof document !== 'undefined' && !document.getElementById('tailwind-cdn')) {
@@ -133,7 +136,7 @@ const AdminToolsDashboard = () => {
       const wsProtocol = api.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${wsProtocol}//${api.host}/ws/dashboard?token=${encodeURIComponent(token)}`;
     } catch {
-      return `ws://localhost:8081/ws/dashboard?token=${encodeURIComponent(token)}`;
+      return `${getWsBaseUrl(API_URL)}/ws/dashboard?token=${encodeURIComponent(token)}`;
     }
   };
 
@@ -176,55 +179,6 @@ headers: {
       console.error('Login check error:', error);
       setIsLoggedIn(false);
       return false;
-    }
-  };
-
-  // NEW: Demo login function
-  const handleDemoLogin = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch(`${API_URL}/api/admin/demo-login`, {
-        method: 'POST',
-        credentials: 'include',
-headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: 'admin@tickethub.co.za',
-          password: 'admin123'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Login failed: HTTP ${response.status}`);
-      }
-      
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Login failed');
-      }
-      
-      // Store the token
-      localStorage.setItem('userToken', result.token);
-      localStorage.setItem('token', result.token);
-      
-      setIsLoggedIn(true);
-      
-      // Fetch dashboard data
-      await fetchDashboardData();
-      fetchBusinessMetrics();
-      fetchSystemMetrics();
-      fetchDetailedSystemMetrics();
-      
-      setError(null);
-    } catch (error) {
-      console.error('Demo login error:', error);
-      setError(error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -857,9 +811,6 @@ headers: {
 
   // NEW: Login Component
   const LoginPrompt = () => {
-    const [loginLoading, setLoginLoading] = useState(false);
-    const [loginError, setLoginError] = useState(null);
-
     const handleLogin = () => {
       // Store the current URL to return after login
       const returnUrl = window.location.pathname + window.location.search;
@@ -867,19 +818,6 @@ headers: {
       
       // Redirect to login page (adjust URL as needed)
       window.location.href = '/login';
-    };
-
-    const handleDemoLoginClick = async () => {
-      setLoginLoading(true);
-      setLoginError(null);
-      
-      try {
-        await handleDemoLogin();
-      } catch (error) {
-        setLoginError(error.message);
-      } finally {
-        setLoginLoading(false);
-      }
     };
 
     return (
@@ -896,63 +834,10 @@ headers: {
             <button
               onClick={handleLogin}
               className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
-              disabled={loginLoading}
             >
               <Icon name="Lock" size={18} color="#fff" />
               Go to Login Page
             </button>
-            
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-3 bg-white text-gray-500 font-medium">Quick Access</span>
-              </div>
-            </div>
-            
-            <button
-              onClick={handleDemoLoginClick}
-              className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
-              disabled={loginLoading}
-            >
-              {loginLoading ? (
-                <>
-                  <div className="animate-spin">
-                    <Icon name="RefreshCw" size={18} color="#fff" />
-                  </div>
-                  Logging in...
-                </>
-              ) : (
-                <>
-                  <Icon name="UserCheck" size={18} color="#fff" />
-                  Login as Demo Admin
-                </>
-              )}
-            </button>
-            
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="font-medium text-gray-800 mb-2 text-sm">Demo Credentials:</p>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between items-center p-2 bg-white rounded">
-                  <span className="text-gray-600">Email:</span>
-                  <span className="font-mono text-gray-800">admin@tickethub.co.za</span>
-                </div>
-                <div className="flex justify-between items-center p-2 bg-white rounded">
-                  <span className="text-gray-600">Password:</span>
-                  <span className="font-mono text-gray-800">admin123</span>
-                </div>
-              </div>
-            </div>
-            
-            {loginError && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg animate-shake">
-                <p className="text-red-600 text-sm flex items-center gap-2">
-                  <Icon name="AlertTriangle" size={14} color="#dc2626" />
-                  {loginError}
-                </p>
-              </div>
-            )}
           </div>
           
           <div className="mt-8 pt-6 border-t border-gray-200">

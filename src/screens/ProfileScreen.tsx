@@ -21,8 +21,6 @@ import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
-const API_URL = 'http://localhost:8081';
-
 // Responsive scaling functions
 const scaleSize = (size) => {
   const scale = width / 375;
@@ -35,7 +33,7 @@ const scaleFont = (size) => {
 };
 
 const ProfileScreen = ({ navigation }) => {
-  const { user, logout, getAuthHeader, hasAdminPrivileges } = useAuth();
+  const { user, logout, getAuthHeader, hasAdminPrivileges, apiBaseUrl, getApiBaseUrl } = useAuth();
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
@@ -225,107 +223,52 @@ const ProfileScreen = ({ navigation }) => {
     if (!hasAdminPrivileges()) return;
     
     setStatsLoading(true);
-    
-    // Mock data for testing
-    const mockStats = {
-      totalEvents: 12,
-      totalTickets: 450,
-      totalRevenue: 67500,
-      totalCustomers: 320
-    };
-    
-    setStats(mockStats);
-    setStatsLoading(false);
-    
-    // Optional API call - only for admins
     try {
       const headers = getAuthHeader();
-      await axios.get(`${API_URL}/api/admin/dashboard/stats`, { headers });
+      const baseUrl =
+        apiBaseUrl || (typeof getApiBaseUrl === 'function' ? await getApiBaseUrl() : '');
+
+      if (!baseUrl) {
+        setStats(null);
+        return;
+      }
+
+      const response = await axios.get(`${baseUrl}/api/admin/dashboard/stats`, { headers });
+      const apiStats = response?.data?.stats;
+
+      if (apiStats) {
+        setStats({
+          totalEvents: apiStats.events?.total ?? 0,
+          totalTickets: apiStats.tickets?.total ?? 0,
+          totalRevenue: apiStats.tickets?.revenue ?? 0,
+          totalCustomers: apiStats.users?.customers ?? 0,
+        });
+      } else {
+        setStats(null);
+      }
     } catch (error) {
-      console.log('API call failed, using mock stats');
+      console.error('Failed to load dashboard stats:', error);
+      setStats(null);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
   const loadPaymentMethods = async () => {
-    // Mock payment methods data
-    const mockPaymentMethods = [
-      {
-        id: 1,
-        type: 'credit_card',
-        last4: '4242',
-        brand: 'visa',
-        expiry: '12/25',
-        isDefault: true,
-        cardholder: getUserDisplayName()
-      },
-      {
-        id: 2,
-        type: 'credit_card',
-        last4: '8888',
-        brand: 'mastercard',
-        expiry: '08/24',
-        isDefault: false,
-        cardholder: getUserDisplayName()
-      },
-      {
-        id: 3,
-        type: 'paypal',
-        email: 'user@example.com',
-        isDefault: false
-      }
-    ];
-    
-    setPaymentMethods(mockPaymentMethods);
+    setPaymentMethods([]);
   };
 
   const loadFavoriteEvents = async () => {
-    // Mock favorite events data
-    const mockFavoriteEvents = [
-      {
-        id: 1,
-        title: 'Summer Music Festival 2024',
-        date: '2024-07-15',
-        venue: 'Central Park',
-        image: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=150',
-        price: 89.99
-      },
-      {
-        id: 2,
-        title: 'Tech Conference 2024',
-        date: '2024-08-22',
-        venue: 'Convention Center',
-        image: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=150',
-        price: 199.99
-      },
-      {
-        id: 3,
-        title: 'Food & Wine Expo',
-        date: '2024-09-05',
-        venue: 'Exhibition Hall',
-        image: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=150',
-        price: 45.00
-      },
-      {
-        id: 4,
-        title: 'Jazz Night Live',
-        date: '2024-07-30',
-        venue: 'Blue Note Club',
-        image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150',
-        price: 35.00
-      }
-    ];
-    
-    setFavoriteEvents(mockFavoriteEvents);
+    setFavoriteEvents([]);
   };
 
   const loadUserProfileData = () => {
-    // Mock user profile data
     setProfileData({
-      firstName: user?.first_name || 'John',
-      lastName: user?.last_name || 'Doe',
-      email: user?.email || 'john.doe@example.com',
-      phone: '+27 72 123 4567',
-      dateOfBirth: '1990-01-15',
+      firstName: user?.first_name || '',
+      lastName: user?.last_name || '',
+      email: user?.email || '',
+      phone: user?.phone || '',
+      dateOfBirth: user?.date_of_birth || '',
     });
   };
 

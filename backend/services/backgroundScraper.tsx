@@ -42,8 +42,8 @@ class BackgroundScraper {
         "❌ Failed to initialize EnhancedEventScraperService:",
         error.message,
       );
-      // Create a mock scraper for fallback
-      this.scraper = this.createMockScraper();
+      // Create a fallback scraper for graceful degradation
+      this.scraper = this.createFallbackScraper();
     }
 
     this.isRunning = false;
@@ -67,13 +67,14 @@ class BackgroundScraper {
     this.scrapeInterval = null;
   }
 
-  // Fallback mock scraper if the real one fails to load
-  createMockScraper() {
-    console.log("🔄 Using mock scraper as fallback");
+  // Fallback scraper if the real one fails to load
+  createFallbackScraper() {
+    console.log("Using fallback scraper as last resort");
     return {
+      isFallback: true,
       scrapeEvents: async () => {
         console.log(
-          "🎭 Mock scraper: No real data available. Returning empty event list.",
+          "Fallback scraper: No real data available. Returning empty event list.",
         );
         return {
           events: [],
@@ -81,7 +82,7 @@ class BackgroundScraper {
             totalEvents: 0,
             categoryDistribution: {},
           },
-          error: "No real event data available. Scraper not loaded.",
+          error: "Scraper not available.",
         };
       },
       getConfiguration: () => ({
@@ -302,7 +303,7 @@ class BackgroundScraper {
         configuration: config,
         scraper: {
           type: this.scraper.constructor.name,
-          hasRealScraper: !this.scraper.isMock,
+          hasRealScraper: !(this.scraper && this.scraper.isFallback),
         },
       };
     } catch (error) {
@@ -339,44 +340,17 @@ class BackgroundScraper {
       console.log(`❌ Fresh scrape failed: ${error.message}`);
     }
 
-    // If all else fails, return mock data
-    console.log("🔄 Returning mock data as fallback");
+    // If all else fails, return empty data with an error message
+    console.log("Returning empty event list as fallback");
     return {
-      events: [
-        {
-          id: "fallback_1",
-          name: "Fallback Event 1",
-          description: "This is fallback data because scraping failed",
-          eventDate: new Date(
-            Date.now() + 3 * 24 * 60 * 60 * 1000,
-          ).toISOString(),
-          venue: "Unknown Venue",
-          category: "other",
-          estimatedAttendees: 1000,
-          previousProvider: "Unknown",
-          source: "Fallback Data",
-        },
-        {
-          id: "fallback_2",
-          name: "Fallback Event 2",
-          description: "This is fallback data because scraping failed",
-          eventDate: new Date(
-            Date.now() + 5 * 24 * 60 * 60 * 1000,
-          ).toISOString(),
-          venue: "Unknown Venue",
-          category: "other",
-          estimatedAttendees: 500,
-          previousProvider: "Unknown",
-          source: "Fallback Data",
-        },
-      ],
+      events: [],
       summary: {
-        totalEvents: 2,
-        categoryDistribution: { other: 2 },
+        totalEvents: 0,
+        categoryDistribution: {},
       },
       source: "fallback",
       cached: false,
-      error: "Using fallback data - scraper not available",
+      error: "Scraper unavailable and no cached data.",
       lastUpdated: new Date(),
     };
   }

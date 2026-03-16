@@ -70,160 +70,12 @@ interface MyTicketsScreenProps {
 interface AuthContextType {
     user: IUser | null;
     getAuthHeader: () => Promise<object>;
+    apiBaseUrl?: string;
+    getApiBaseUrl?: () => Promise<string>;
 }
 // --- END ASSUMED INTERFACES ---
 
 const { width, height } = Dimensions.get('window');
-const API_URL = 'http://localhost:3000';
-
-// Enhanced mock data with completely different unique images for each ticket
-const mockTickets: Ticket[] = [
-  {
-    ticket_id: '1',
-    ticket_code: 'TKT-001-ABC-123',
-    event_id: '1',
-    event_name: 'Summer Music Festival',
-    event_date: '2025-12-25T18:00:00Z', // Changed to 2025
-    location: 'Cape Town Stadium',
-    ticket_type: 'vip',
-    price: 299,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-10-01T10:30:00Z',
-    image_url: 'https://picsum.photos/800/600?random=1',
-    venue: 'Main Stage',
-    organizer: 'EventHub Productions',
-    current_attendees: 850,
-    max_attendees: 1200
-  },
-  {
-    ticket_id: '2',
-    ticket_code: 'TKT-002-XYZ-789',
-    event_id: '2',
-    event_name: 'Tech Innovation Summit',
-    event_date: '2025-11-15T09:00:00Z', // Changed to 2025
-    location: 'Sandton Convention Centre',
-    ticket_type: 'general',
-    price: 199,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-09-20T14:15:00Z',
-    image_url: 'https://picsum.photos/800/600?random=2',
-    venue: 'Grand Ballroom',
-    organizer: 'Tech Events SA',
-    current_attendees: 320,
-    max_attendees: 1000
-  },
-  {
-    ticket_id: '3',
-    ticket_code: 'TKT-003-DEF-456',
-    event_id: '3',
-    event_name: 'Jazz Night Under the Stars',
-    event_date: '2025-11-08T19:30:00Z', // Changed to 2025
-    location: 'Riverside Amphitheater',
-    ticket_type: 'premium',
-    price: 180,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-10-05T16:20:00Z',
-    image_url: 'https://picsum.photos/800/600?random=3',
-    venue: 'Harbor View Lounge',
-    organizer: 'Jazz Nights Co.',
-    current_attendees: 180,
-    max_attendees: 300
-  },
-  {
-    ticket_id: '4',
-    ticket_code: 'TKT-004-GHI-789',
-    event_id: '4',
-    event_name: 'Food & Wine Expo',
-    event_date: '2025-11-28T11:00:00Z', // Changed to 2025
-    location: 'CTICC',
-    ticket_type: 'vip',
-    price: 250,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-10-10T09:15:00Z',
-    image_url: 'https://picsum.photos/800/600?random=4',
-    venue: 'Exhibition Hall A',
-    organizer: 'Culinary Experiences',
-    current_attendees: 280,
-    max_attendees: 800
-  },
-  {
-    ticket_id: '5',
-    ticket_code: 'TKT-005-JKL-012',
-    event_id: '5',
-    event_name: 'Comedy Night Special',
-    event_date: '2025-12-05T20:00:00Z', // Changed to 2025
-    location: 'Baxter Theatre',
-    ticket_type: 'general',
-    price: 120,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-10-08T14:30:00Z',
-    image_url: 'https://picsum.photos/800/600?random=5',
-    venue: 'Main Theater',
-    organizer: 'Laugh Factory',
-    current_attendees: 95,
-    max_attendees: 150
-  },
-  {
-    ticket_id: '6',
-    ticket_code: 'TKT-006-MNO-345',
-    event_id: '6',
-    event_name: 'Art Exhibition Opening',
-    event_date: '2025-11-05T18:00:00Z', // Changed to 2025
-    location: 'Modern Art Museum',
-    ticket_type: 'premium',
-    price: 145,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-10-12T11:20:00Z',
-    image_url: 'https://picsum.photos/800/600?random=6',
-    venue: 'Gallery Hall',
-    organizer: 'Art Collective',
-    current_attendees: 75,
-    max_attendees: 200
-  },
-  {
-    ticket_id: '7',
-    ticket_code: 'TKT-007-PQR-678',
-    event_id: '7',
-    event_name: 'Rock Revival Concert',
-    event_date: '2025-11-20T20:00:00Z', // Changed to 2025
-    location: 'Madison Square Arena',
-    ticket_type: 'vip',
-    price: 220,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-10-15T15:45:00Z',
-    image_url: 'https://picsum.photos/800/600?random=7',
-    venue: 'Main Arena',
-    organizer: 'Rock Productions',
-    current_attendees: 850,
-    max_attendees: 1200
-  },
-  {
-    ticket_id: '8',
-    ticket_code: 'TKT-008-STU-901',
-    event_id: '8',
-    event_name: 'Wine Tasting Gala',
-    event_date: '2026-01-15T18:00:00Z', // Changed to 2026
-    location: 'Vineyard Estate',
-    ticket_type: 'premium',
-    price: 195,
-    currency: 'ZAR',
-    ticket_status: 'ACTIVE',
-    purchase_date: '2024-10-18T13:10:00Z',
-    image_url: 'https://picsum.photos/800/600?random=8',
-    venue: 'Wine Cellar',
-    organizer: 'Vineyard Tours',
-    current_attendees: 95,
-    max_attendees: 150
-  }
-];
-
 const getTicketTypeLabel = (type: Ticket['ticket_type']): string => {
   const labels: Record<Ticket['ticket_type'], string> = {
     early_bird: 'Early Bird',
@@ -426,7 +278,7 @@ const DetailItem: FC<DetailItemProps> = ({ icon, label, value }) => (
 
 
 const MyTicketsScreen: FC<MyTicketsScreenProps> = ({ navigation }) => {
-  const { user, getAuthHeader }: AuthContextType = useAuth();
+  const { user, getAuthHeader, apiBaseUrl, getApiBaseUrl }: AuthContextType = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -450,27 +302,34 @@ const MyTicketsScreen: FC<MyTicketsScreenProps> = ({ navigation }) => {
 
   const fetchTickets = async (): Promise<void> => {
     try {
-      // Try to fetch from API first
       const headers = await getAuthHeader();
-      const response = await axios.get(
-        `${API_URL}/api/payments/tickets/customer/${(user as IUser).customer_id}`,
-        { headers, timeout: 5000 } // Add timeout
-      );
-      
-      if (response.data.tickets && response.data.tickets.length > 0) {
-        setTickets(response.data.tickets);
-        setApiError(false); // Important: Set to false when API works
-      } else {
-        // If API returns empty, use mock data but don't show error
-        setTickets(mockTickets);
-        setApiError(false); // Don't show demo mode banner
+      const baseUrl =
+        apiBaseUrl ||
+        (typeof getApiBaseUrl === 'function' ? await getApiBaseUrl() : '');
+      const customerId = (user as IUser)?.customer_id || (user as IUser)?.id;
+
+      if (!baseUrl || !customerId) {
+        setTickets([]);
+        setApiError(true);
+        return;
       }
+
+      const response = await axios.get(
+        `${baseUrl}/api/payments/tickets/customer/${customerId}`,
+        { headers, timeout: 5000 }
+      );
+
+      const ticketList = Array.isArray(response.data?.tickets)
+        ? response.data.tickets
+        : Array.isArray(response.data)
+          ? response.data
+          : [];
+
+      setTickets(ticketList);
+      setApiError(false);
     } catch (err) {
       console.error('Error fetching tickets:', err);
-      // Only show demo mode if you actually want users to know it's mock data
-      // setApiError(true); // Comment this out to hide the banner
-      setApiError(false); // Use this instead to hide "Demo Mode" banner
-      setTickets(mockTickets);
+      setApiError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -697,7 +556,7 @@ const MyTicketsScreen: FC<MyTicketsScreenProps> = ({ navigation }) => {
       {apiError && (
         <View style={styles.apiWarning}>
           <Ionicons name="information-circle" size={18} color="#f59e0b" />
-          <Text style={styles.apiWarningText}>Demo Mode - Sample data displayed</Text>
+          <Text style={styles.apiWarningText}>Live ticket sync is unavailable. Pull to refresh.</Text>
         </View>
       )}
 

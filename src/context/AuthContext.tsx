@@ -398,39 +398,6 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         }
       }
 
-      // Try demo admin login as last resort
-      try {
-        console.log('🔍 Trying demo admin login...');
-        const response = await axios.post(`${apiBase}/api/admin/demo-login`, {
-          email: identifier,
-          password
-        });
-
-        if (response.data.success) {
-          console.log('✅ Demo admin login successful');
-          const userData: IUser = response.data.user;
-          const authTokenResponse: string = response.data.token;
-          
-          userData.role = 'admin';
-          userData.userType = 'admin';
-          userData.displayRole = roleMapDisplay['admin'];
-          userData.userId = userData.admin_id || userData.id;
-
-          await Promise.all([
-            AsyncStorage.setItem('user', JSON.stringify(userData)),
-            AsyncStorage.setItem('token', authTokenResponse)
-          ]);
-
-          setUser(userData);
-          setToken(authTokenResponse);
-          setAuthToken(authTokenResponse);
-          return { success: true, user: userData, token: authTokenResponse };
-        }
-      } catch (demoError: any) {
-        console.log('ℹ️ Demo login failed:', demoError.response?.status);
-      }
-
-
       // All attempts failed
       console.log('❌ All login attempts failed');
       return {

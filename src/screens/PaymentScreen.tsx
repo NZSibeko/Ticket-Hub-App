@@ -18,7 +18,6 @@ import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
 import { buildPurchasedTicketBatch } from '../utils/purchasedTickets';
 
-const API_URL = 'http://localhost:3000';
 const { width } = Dimensions.get('window');
 const PAGE_PADDING = width >= 1280 ? 32 : width >= 768 ? 24 : 16;
 const PAGE_MAX_WIDTH = 1180;
@@ -32,13 +31,6 @@ const cardShadow = Platform.select({
     elevation: 2,
   },
 });
-
-const DEMO_CARD = {
-  cardNumber: '4242 4242 4242 4242',
-  expiry: '12/34',
-  cvc: '123',
-  name: 'Demo Buyer',
-};
 
 const formatCurrency = (amount, currency = 'USD') => {
   try {
@@ -67,12 +59,18 @@ const getTicketLabel = (ticketType) =>
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (character) => character.toUpperCase());
 
+const EMPTY_CARD = {
+  cardNumber: '',
+  expiry: '',
+  cvc: '',
+  name: '',
+};
+
 const PaymentScreen = ({ route, navigation }) => {
   const { event, ticketType, quantity = 1, totalAmount: routeTotalAmount } = route.params || {};
-  const { user, getAuthHeader } = useAuth();
+  const { user, getAuthHeader, apiBaseUrl, getApiBaseUrl } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [paymentMode, setPaymentMode] = useState('demo');
-  const [cardDetails, setCardDetails] = useState(DEMO_CARD);
+  const [cardDetails, setCardDetails] = useState(EMPTY_CARD);
 
   const selectedTicketType = {
     type: ticketType?.type || 'general',
@@ -122,16 +120,6 @@ const PaymentScreen = ({ route, navigation }) => {
     });
   };
 
-  const runDemoPayment = async () => {
-    setLoading(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      finalizeSuccess('DEMO-');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const runLivePayment = async () => {
     if (!cardDetails.cardNumber || !cardDetails.expiry || !cardDetails.cvc || !cardDetails.name) {
       Alert.alert('Error', 'Please fill in all card details');
@@ -146,8 +134,15 @@ const PaymentScreen = ({ route, navigation }) => {
     setLoading(true);
     try {
       const headers = typeof getAuthHeader === 'function' ? await getAuthHeader() : {};
+      const baseUrl =
+        apiBaseUrl || (typeof getApiBaseUrl === 'function' ? await getApiBaseUrl() : '');
+
+      if (!baseUrl) {
+        Alert.alert('Payment unavailable', 'Payment service is not configured yet.');
+        return;
+      }
       const paymentIntentResponse = await axios.post(
-        `${API_URL}/api/payments/create-payment-intent`,
+        `${baseUrl}/api/payments/create-payment-intent`,
         { amount: totalAmount, currency, eventId: event.event_id, customerId },
         { headers }
       );
@@ -155,7 +150,7 @@ const PaymentScreen = ({ route, navigation }) => {
       const { paymentIntentId } = paymentIntentResponse.data;
 
       const confirmResponse = await axios.post(
-        `${API_URL}/api/payments/confirm-payment`,
+        `${baseUrl}/api/payments/confirm-payment`,
         {
           paymentIntentId,
           eventId: event.event_id,
@@ -176,8 +171,8 @@ const PaymentScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error('Payment error:', error);
       Alert.alert(
-        'Live gateway unavailable',
-        'Use the demo payment mode for testing while the real gateway is not available.'
+        'Payment unavailable',
+        'The payment gateway could not be reached. Please try again shortly.'
       );
     } finally {
       setLoading(false);
@@ -185,10 +180,6 @@ const PaymentScreen = ({ route, navigation }) => {
   };
 
   const handleSubmit = () => {
-    if (paymentMode === 'demo') {
-      runDemoPayment();
-      return;
-    }
     runLivePayment();
   };
 
@@ -221,12 +212,12 @@ const PaymentScreen = ({ route, navigation }) => {
           <View style={styles.heroCard}>
             <View style={styles.heroCopy}>
               <View style={styles.modeBadge}>
-                <Ionicons name={paymentMode === 'demo' ? 'flask-outline' : 'shield-checkmark-outline'} size={15} color={paymentMode === 'demo' ? '#7c3aed' : '#166534'} />
-                <Text style={styles.modeBadgeText}>{paymentMode === 'demo' ? 'Demo checkout active' : 'Live gateway active'}</Text>
+                <Ionicons name="shield-checkmark-outline" size={15} color="#166534" />
+                <Text style={styles.modeBadgeText}>Live gateway active</Text>
               </View>
-              <Text style={styles.heroTitle}>Confirm payment with a clean, test-ready checkout flow.</Text>
+              <Text style={styles.heroTitle}>Confirm payment with a secure, production-ready checkout.</Text>
               <Text style={styles.heroSubtitle}>
-                Demo mode is enabled for testing right now, so you can validate the complete payment and success journey without a real charge.
+                Your card details are encrypted and processed through the live payment gateway configured for Ticket Hub.
               </Text>
               <View style={styles.heroMeta}>
                 <Text style={styles.heroMetaText}>{formatDate(event.start_date)}</Text>
@@ -251,24 +242,12 @@ const PaymentScreen = ({ route, navigation }) => {
           <View style={styles.contentGrid}>
             <View style={styles.mainColumn}>
               <View style={styles.panel}>
-                <Text style={styles.panelEyebrow}>Payment mode</Text>
-                <Text style={styles.panelTitle}>Choose how to complete checkout</Text>
-                <View style={styles.modeSwitch}>
-                  <TouchableOpacity style={[styles.modeButton, paymentMode === 'demo' && styles.modeButtonActive]} activeOpacity={0.9} onPress={() => setPaymentMode('demo')}>
-                    <Text style={[styles.modeButtonText, paymentMode === 'demo' && styles.modeButtonTextActive]}>Demo payment</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.modeButton, paymentMode === 'live' && styles.modeButtonActive]} activeOpacity={0.9} onPress={() => setPaymentMode('live')}>
-                    <Text style={[styles.modeButtonText, paymentMode === 'live' && styles.modeButtonTextActive]}>Live gateway</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.demoNotice}>
-                  <Ionicons name="flask-outline" size={16} color="#7c3aed" />
-                  <Text style={styles.demoNoticeText}>Use the prefilled test card to simulate payment instantly during development.</Text>
-                </View>
-                <TouchableOpacity style={styles.demoButton} activeOpacity={0.9} onPress={() => { setCardDetails(DEMO_CARD); setPaymentMode('demo'); }}>
-                  <Ionicons name="sparkles-outline" size={16} color="#2563eb" />
-                  <Text style={styles.demoButtonText}>Autofill demo card</Text>
-                </TouchableOpacity>
+                <Text style={styles.panelEyebrow}>Payment gateway</Text>
+                <Text style={styles.panelTitle}>Live checkout enabled</Text>
+                <Text style={styles.panelCopy}>
+                  Payments are processed securely through the configured live gateway. Confirm your card details before
+                  submitting the charge.
+                </Text>
               </View>
 
               <View style={styles.panel}>
@@ -314,7 +293,7 @@ const PaymentScreen = ({ route, navigation }) => {
                 <Text style={styles.panelTitle}>What happens after payment</Text>
                 <View style={styles.stepRow}><View style={styles.stepIcon}><Ionicons name="checkmark-done-outline" size={16} color="#2563eb" /></View><Text style={styles.stepText}>The order moves directly to the success confirmation workflow.</Text></View>
                 <View style={styles.stepRow}><View style={styles.stepIcon}><Ionicons name="mail-outline" size={16} color="#2563eb" /></View><Text style={styles.stepText}>A booking reference is generated for testing, tracking, and handoff.</Text></View>
-                <View style={styles.stepRow}><View style={styles.stepIcon}><Ionicons name="shield-checkmark-outline" size={16} color="#2563eb" /></View><Text style={styles.stepText}>Demo mode keeps checkout fully testable while avoiding real settlement calls.</Text></View>
+                <View style={styles.stepRow}><View style={styles.stepIcon}><Ionicons name="shield-checkmark-outline" size={16} color="#2563eb" /></View><Text style={styles.stepText}>Payments are confirmed by the live gateway before tickets are issued.</Text></View>
               </View>
             </View>
           </View>
@@ -326,7 +305,7 @@ const PaymentScreen = ({ route, navigation }) => {
             </View>
             <TouchableOpacity style={[styles.confirmButton, loading && styles.confirmButtonDisabled]} activeOpacity={0.9} onPress={handleSubmit} disabled={loading}>
               {loading ? <ActivityIndicator size="small" color="#ffffff" /> : <>
-                <Text style={styles.confirmButtonText}>{paymentMode === 'demo' ? 'Complete demo payment' : 'Submit live payment'}</Text>
+                <Text style={styles.confirmButtonText}>Submit payment</Text>
                 <Ionicons name="arrow-forward" size={18} color="#ffffff" />
               </>}
             </TouchableOpacity>
@@ -374,6 +353,7 @@ const styles = StyleSheet.create({
   panel: { borderRadius: 24, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#dbe4f3', padding: width >= 768 ? 20 : 16, ...cardShadow },
   panelEyebrow: { fontSize: 10, fontWeight: '800', color: '#2563eb', letterSpacing: 0.8, textTransform: 'uppercase' },
   panelTitle: { marginTop: 8, fontSize: 22, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3 },
+  panelCopy: { marginTop: 12, fontSize: 13, lineHeight: 20, color: '#475569' },
   modeSwitch: { flexDirection: width >= 720 ? 'row' : 'column', gap: 10, marginTop: 18 },
   modeButton: { flex: 1, minHeight: 48, borderRadius: 14, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#dbe4f3', alignItems: 'center', justifyContent: 'center' },
   modeButtonActive: { backgroundColor: '#0f172a', borderColor: '#0f172a' },

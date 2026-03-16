@@ -119,21 +119,4 @@ const styles = StyleSheet.create({
   },
 });
 
-const fetchEvents = async () => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const data = await ODataService.get('zi_events', {
-      $filter: `end_date ge ${today}`,
-      $orderby: 'start_date'
-    });
-    setEvents(data);
-  } catch (err) {
-    console.log('Using demo data due to network error');
-    // Use demo data from demoData.js
-    setEvents(demoEvents);
-  } finally {
-    setLoading(false);
-  }
-};
-
 export default EventListScreen;
