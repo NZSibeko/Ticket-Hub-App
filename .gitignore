@@ -25,6 +25,7 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+startup.log
 
 # macOS
 .DS_Store
@@ -32,9 +33,21 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+backend/.env
+backend/.env.*
 
 # typescript
 *.tsbuildinfo
+
+# local databases and backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.backup
+backups/
+backend/backups/
 
 app-example
 
