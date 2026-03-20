@@ -64,3 +64,43 @@ web-build/
 
 # Production build
 build/
+
+ # Environment files
+   .env
+   .env.local
+   .env.development.local
+   .env.test.local
+   .env.production.local
+
+   # Build outputs
+   dist/
+   build/
+   .expo/
+   .expo-shared/
+   *.jks
+   *.p8
+   *.p12
+
+   # Database
+   backend/*.db
+   backups/
+
+   # Logs
+   logs/
+   *.log
+   npm-debug.log*
+
+   # OS files
+   .DS_Store
+   Thumbs.db
+
+   # IDE
+   .idea/
+   .vscode/
+   *.swp
+   *.swo
+
+   # Temporary
+   tmp/
+   temp/
+   .cache/
