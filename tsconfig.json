@@ -1,46 +1,20 @@
+```json
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "module": "ESNext",
-    "rootDir": "./",
-    "outDir": "./dist",
+    "target": "esnext",
+    "module": "commonjs",
+    "jsx": "preserve",
     "strict": true,
-    "noCheck": true,
     "esModuleInterop": true,
-    "moduleResolution": "bundler",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
-    "resolveJsonModule": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "sourceMap": true,
+    "allowJs": true,
+    "baseUrl": "."
   },
-  "include": [
-    "App.tsx",
-    "App.web.tsx",
-    "index.ts",
-    "index.web.tsx",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "components/**/*.ts",
-    "components/**/*.tsx",
-    "hooks/**/*.ts",
-    "hooks/**/*.tsx",
-    "constants/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "backend",
-    "scripts"
-  ],
-  "extends": "expo/tsconfig.base"
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules"]
 }
+```

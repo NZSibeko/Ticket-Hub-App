@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { getApiBaseUrlSync } from '../utils/apiBase';
+import { useNavigation } from '@react-navigation/native';
+
 
 const API_URL = getApiBaseUrlSync();
 
@@ -64,6 +66,8 @@ const priorityTone = (priority?: string | null) => {
 };
 
 export default function EventSupportDashboardScreen() {
+  const navigation = useNavigation();
+
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

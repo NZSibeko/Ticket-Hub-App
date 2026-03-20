@@ -19,8 +19,12 @@ import {
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+
 
 export default function EventPlannerScreen() {
+  const navigation = useNavigation();
+
   const { getAuthHeader, getApiBaseUrl } = useAuth();
   const { width: viewportWidth } = useWindowDimensions();
   const [events, setEvents] = useState([]);

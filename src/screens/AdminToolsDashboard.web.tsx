@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getApiBaseUrlSync } from '../utils/apiBase';
+import { useNavigation } from '@react-navigation/native';
+
 
 const API_URL = getApiBaseUrlSync() ||
   (typeof window !== 'undefined' ? window.location.origin : '');

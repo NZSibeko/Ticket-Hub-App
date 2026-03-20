@@ -1,8 +1,7 @@
+```typescript
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
-
-const appDirectory = path.resolve(__dirname);
 
 // Modules that need to be compiled
 const compileNodeModules = [
@@ -19,7 +18,7 @@ const compileNodeModules = [
 
 // Babel loader configuration
 const babelLoaderConfiguration = {
-  test: /\.(js|jsx|ts|tsx)$/,
+  test: /\.(js|jsx|ts|tsx)$/i,
   include: [
     path.resolve(appDirectory, 'index.web.js'),
     path.resolve(appDirectory, 'App.js'),
@@ -35,10 +34,9 @@ const babelLoaderConfiguration = {
     ...compileNodeModules,
   ],
   exclude: [
-    // Exclude problematic Expo modules that have TypeScript issues
     /expo-modules-core\/src\/ts-declarations/,
-    /expo-camera/,
-    /expo-status-bar\/src\/types/,
+    /expo-camera/, // Exclude problematic Expo modules that have TypeScript issues
+    /expo-status-bar\/src\/types/, // Exclude problematic Expo modules that have TypeScript issues
   ],
   use: {
     loader: path.resolve(appDirectory, 'node_modules/babel-loader'),
@@ -50,10 +48,7 @@ const babelLoaderConfiguration = {
         [
           '@babel/preset-env',
           {
-            targets: {
-              browsers: ['last 2 versions', 'not dead', '> 0.2%'],
-            },
-            modules: 'es2015',
+            targets: ['last 2 versions', 'not dead', '> 0.2%'],
           },
         ],
         '@babel/preset-react',
@@ -83,116 +78,35 @@ const babelLoaderConfiguration = {
 
 // Image loader configuration
 const imageLoaderConfiguration = {
-  test: /\.(gif|jpe?g|png|svg)$/,
+  test: /\.(gif|jpe?g|png|svg)$/i,
   type: 'asset/resource',
   generator: {
-    filename: 'images/[name].[hash][ext]',
+    filename: '[name].[hash][ext]',
   },
 };
 
 // Font loader configuration
 const fontLoaderConfiguration = {
-  test: /\.(woff|woff2|ttf|otf|eot)$/,
+  test: /\.(woff|woff2|ttf|otf|eot)$/i,
   type: 'asset/resource',
   generator: {
-    filename: 'fonts/[name].[hash][ext]',
+    filename: '[name].[hash][ext]',
   },
 };
 
 module.exports = {
-  entry: path.resolve(appDirectory, 'index.web.js'),
-
+  entry: path.resolve(appDirectory, 'index.web.tsx'),
   output: {
+    path: path.resolve(__dirname, 'dist'),
     filename: 'bundle.[contenthash].js',
-    path: path.resolve(appDirectory, 'dist'),
     publicPath: '/',
-    clean: true,
   },
-
-  resolve: {
+  resolveLoader: {
     alias: {
-      'react-native$': 'react-native-web',
-      'react-native-web': path.resolve(__dirname, 'node_modules/react-native-web'),
-      // Ignore problematic expo modules on web
-      'expo-camera': path.resolve(__dirname, 'src/mocks/expo-camera.js'),
-      'expo-status-bar': path.resolve(__dirname, 'src/mocks/expo-status-bar.js'),
-      '@react-native-async-storage/async-storage': path.resolve(__dirname, 'node_modules/@react-native-async-storage/async-storage'),
-    },
-    extensions: ['.web.tsx', '.web.ts', '.web.js', '.web.jsx', '.tsx', '.ts', '.js', '.jsx', '.mjs'],
-    fullySpecified: false,
-    fallback: {
-      process: require.resolve('process/browser'),
-      buffer: require.resolve('buffer/'),
-      stream: require.resolve('stream-browserify'),
-      util: require.resolve('util/'),
-      assert: require.resolve('assert/'),
-      http: require.resolve('stream-http'),
-      https: require.resolve('https-browserify'),
-      os: require.resolve('os-browserify/browser'),
-      url: require.resolve('url/'),
+      assets: path.resolve(__dirname, 'assets'),
+      images: path.resolve(appDirectory, 'assets/images'),
+      fonts: path.resolve(appDirectory, 'assets/fonts'),
     },
   },
-
-  module: {
-    rules: [
-      babelLoaderConfiguration,
-      imageLoaderConfiguration,
-      fontLoaderConfiguration,
-      // Handle .mjs files
-      {
-        test: /\.mjs$/,
-        include: /node_modules/,
-        type: 'javascript/auto',
-      },
-    ],
-  },
-
-  plugins: [
-    new HtmlWebpackPlugin({
-      template: path.resolve(appDirectory, 'public', 'index.html'),
-      filename: 'index.html',
-      inject: 'body',
-    }),
-    new webpack.DefinePlugin({
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-      __DEV__: process.env.NODE_ENV !== 'production',
-    }),
-    new webpack.ProvidePlugin({
-      process: 'process/browser',
-      Buffer: ['buffer', 'Buffer'],
-    }),
-    // Ignore problematic modules
-    new webpack.IgnorePlugin({
-      resourceRegExp: /^\.\/locale$/,
-      contextRegExp: /moment$/,
-    }),
-  ],
-
-  devServer: {
-    static: {
-      directory: path.join(appDirectory, 'public'),
-    },
-    historyApiFallback: true,
-    compress: true,
-    hot: true,
-    port: 3002,
-    open: true,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-    },
-  },
-
-  mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
-  devtool: process.env.NODE_ENV === 'production' ? 'source-map' : 'cheap-module-source-map',
-
-  performance: {
-    hints: process.env.NODE_ENV === 'production' ? 'warning' : false,
-    maxEntrypointSize: 512000,
-    maxAssetSize: 512000,
-  },
-  
-  ignoreWarnings: [
-    /Failed to parse source map/,
-    /export .* was not found/,
-  ],
 };
+```

@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { getApiBaseUrlSync } from '../utils/apiBase';
+import { useNavigation } from '@react-navigation/native';
+
 
 const DebugScreen = () => {
   const { user, getAuthHeader, logout } = useAuth();
